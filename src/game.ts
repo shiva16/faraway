@@ -1,6 +1,11 @@
 import { T, WORLD_W, WORLD_H } from './types';
 import type { TileDef, Player, Interactable, SaveState } from './types';
-import { TILE_DEFS, buildWorld, INTERACTABLES, DISCOVERIES } from './world';
+import {
+  TILE_DEFS, buildWorld, INTERACTABLES, DISCOVERIES,
+  outerTile, getDailyNotes, getDailyAtmosphere,
+  LAYER2_INTERACTABLES, LAYER2_DISCOVERIES,
+} from './world';
+import type { Atmosphere } from './world';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -45,6 +50,17 @@ let lastAutoSave             = 0;
 // Interactable proximity
 let nearbyInteractable: Interactable | null = null;
 
+// Daily rotating content + atmosphere
+let dailyNotes: Interactable[] = [];
+let atmosphere: Atmosphere     = 'clear';
+
+// Rain particles (screen-space, animated by wavePhase)
+const RAINDROPS = Array.from({ length: 200 }, (_, i) => ({
+  x:     Math.sin(i * 1.37) * 0.5 + 0.5,
+  y:     Math.cos(i * 0.91) * 0.5 + 0.5,
+  speed: 8 + (Math.sin(i * 2.1) * 0.5 + 0.5) * 6,
+}));
+
 // Day/night cycle — time in minutes (0–1440)
 let dayTime      = 7 * 60; // start at 7am
 let lastRealTime = 0;
@@ -57,7 +73,7 @@ let oceanGain: GainNode | null    = null;
 
 function tileAt(tx: number, ty: number): T {
   const x = Math.floor(tx), y = Math.floor(ty);
-  if (x < 0 || y < 0 || x >= WORLD_W || y >= WORLD_H) return T.DEEP_WATER;
+  if (x < 0 || y < 0 || x >= WORLD_W || y >= WORLD_H) return outerTile(x, y);
   return world[y][x];
 }
 
@@ -156,7 +172,13 @@ function drawWorld() {
 // ── Interactable sprites ──────────────────────────────────────────────────────
 
 function drawInteractableSprites() {
-  for (const obj of INTERACTABLES) {
+  const layer2Active = save.discoveries.length >= DISCOVERIES.length;
+  const allObjs: Interactable[] = [
+    ...INTERACTABLES,
+    ...dailyNotes,
+    ...(layer2Active ? LAYER2_INTERACTABLES : []),
+  ];
+  for (const obj of allObjs) {
     if (save.flags[`used_${obj.id}`] && obj.id !== 'hilltop_view') continue;
     const { sx, sy } = worldToScreen(obj.tx, obj.ty);
     if (sx < -TILE_PX || sx > canvas.width + TILE_PX) continue;
@@ -297,6 +319,51 @@ function drawPlayer() {
   }
 }
 
+// ── Atmosphere effects ────────────────────────────────────────────────────────
+
+function drawAtmosphere() {
+  switch (atmosphere) {
+    case 'fog': {
+      ctx.fillStyle = 'rgba(190,200,210,0.20)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const grad = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.18,
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.72,
+      );
+      grad.addColorStop(0, 'rgba(190,200,210,0)');
+      grad.addColorStop(1, 'rgba(190,200,210,0.42)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      break;
+    }
+    case 'mist': {
+      ctx.fillStyle = 'rgba(210,220,230,0.11)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      break;
+    }
+    case 'rain': {
+      ctx.strokeStyle = 'rgba(155,175,210,0.32)';
+      ctx.lineWidth   = 1;
+      for (const drop of RAINDROPS) {
+        const sx = ((drop.x + wavePhase * 0.018) % 1) * canvas.width;
+        const sy = ((drop.y + wavePhase * drop.speed * 0.0018) % 1) * canvas.height;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx - 1, sy + 9);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(90,120,175,0.07)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      break;
+    }
+    case 'golden': {
+      ctx.fillStyle = 'rgba(210,165,35,0.09)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      break;
+    }
+  }
+}
+
 // ── UI ─────────────────────────────────────────────────────────────────────────
 
 function drawZoneBanner() {
@@ -362,9 +429,12 @@ function drawDialog() {
 function drawDiscoveries() {
   if (!discPanelOpen) return;
 
-  const found = DISCOVERIES.filter(d => save.discoveries.includes(d.id));
+  const layer2Active = save.discoveries.length >= DISCOVERIES.length;
+  const allDiscs     = layer2Active ? [...DISCOVERIES, ...LAYER2_DISCOVERIES] : DISCOVERIES;
+  const found        = allDiscs.filter(d => save.discoveries.includes(d.id));
   const W = 300, PAD = 20;
-  const H = Math.min(found.length * 44 + 80, canvas.height - 80);
+  const headerH = layer2Active ? 68 : 52;
+  const H = Math.min(found.length * 44 + headerH, canvas.height - 80);
   const X = (canvas.width - W) / 2;
   const Y = (canvas.height - H) / 2;
 
@@ -377,11 +447,17 @@ function drawDiscoveries() {
   ctx.fillStyle   = '#d4a853';
   ctx.font        = 'bold 13px "Courier New", monospace';
   ctx.textAlign   = 'center';
-  ctx.fillText(`DISCOVERIES  ${found.length}/${DISCOVERIES.length}`, X + W / 2, Y + 28);
+  ctx.fillText(`DISCOVERIES  ${found.length}/${allDiscs.length}`, X + W / 2, Y + 28);
+
+  if (layer2Active) {
+    ctx.fillStyle = '#8a6830';
+    ctx.font      = '10px "Courier New", monospace';
+    ctx.fillText('✦  deeper secrets revealed  ✦', X + W / 2, Y + 46);
+  }
 
   ctx.textAlign = 'left';
   found.forEach((d, i) => {
-    const ry = Y + 52 + i * 44;
+    const ry = Y + headerH + i * 44;
     ctx.fillStyle  = '#3a2e18';
     ctx.fillRect(X + PAD, ry, W - PAD * 2, 36);
     ctx.fillStyle  = '#c8a050';
@@ -411,12 +487,15 @@ function drawDiscoveries() {
 
 function drawHUD() {
   // Discovery count (top left)
-  const n = save.discoveries.length;
+  const n          = save.discoveries.length;
+  const totalDiscs = n >= DISCOVERIES.length
+    ? DISCOVERIES.length + LAYER2_DISCOVERIES.length
+    : DISCOVERIES.length;
   ctx.fillStyle  = 'rgba(0,0,0,0.5)';
   ctx.fillRect(14, 14, 120, 24);
   ctx.fillStyle  = '#7a6838';
   ctx.font       = '11px "Courier New", monospace';
-  ctx.fillText(`◇ ${n}/${DISCOVERIES.length} found   [Tab]`, 22, 30);
+  ctx.fillText(`◇ ${n}/${totalDiscs} found   [Tab]`, 22, 30);
 
   // Save status (top right)
   if (saveStatusTimer > 0) {
@@ -513,6 +592,7 @@ function drawFireflies() {
 // ── Zone detection ────────────────────────────────────────────────────────────
 
 function currentZone(): string {
+  if (player.x < 0 || player.x >= WORLD_W || player.y < 0 || player.y >= WORLD_H) return 'Open Water';
   const t = tileAt(player.x, player.y);
   const dx = player.x - 13, dy = player.y - 12;
   if (Math.sqrt(dx*dx + dy*dy) < 5) return 'The Sacred Grove';
@@ -635,9 +715,9 @@ function movePlayer(dt: number) {
   if (dx !== 0 && passable(nx + Math.sign(dx) * foot, player.y)) player.x = nx;
   if (dy !== 0 && passable(player.x, ny + Math.sign(dy) * foot)) player.y = ny;
 
-  // Clamp to world
-  player.x = Math.max(0.5, Math.min(WORLD_W - 0.5, player.x));
-  player.y = Math.max(0.5, Math.min(WORLD_H - 0.5, player.y));
+  // Wide clamp — allows far ocean exploration while preventing numeric overflow
+  player.x = Math.max(-80, Math.min(WORLD_W + 80, player.x));
+  player.y = Math.max(-80, Math.min(WORLD_H + 80, player.y));
 
   // Walk animation
   if (player.moving) {
@@ -687,9 +767,15 @@ function loop(now: number) {
   }
   if (zoneNameTimer > 0) zoneNameTimer--;
 
-  // Nearby interactable
+  // Nearby interactable — base + daily + layer 2 (when unlocked)
   nearbyInteractable = null;
-  for (const obj of INTERACTABLES) {
+  const layer2On = save.discoveries.length >= DISCOVERIES.length;
+  const searchObjs: Interactable[] = [
+    ...INTERACTABLES,
+    ...dailyNotes,
+    ...(layer2On ? LAYER2_INTERACTABLES : []),
+  ];
+  for (const obj of searchObjs) {
     const dx = player.x - obj.tx, dy = player.y - obj.ty;
     if (Math.sqrt(dx*dx + dy*dy) <= obj.range) {
       nearbyInteractable = obj;
@@ -723,6 +809,7 @@ function loop(now: number) {
   drawStars();
   drawWorld();
   drawFireflies();
+  drawAtmosphere();
   drawInteractableSprites();
   drawPlayer();
 
@@ -768,10 +855,26 @@ export function startGame(
   sha: string | null,
   saveCallback: (s: SaveState, sha: string | null) => Promise<string>,
 ) {
-  save    = initialSave;
-  saveSha = sha;
-  onSave  = saveCallback;
-  world   = buildWorld();
+  save       = initialSave;
+  saveSha    = sha;
+  onSave     = saveCallback;
+  world      = buildWorld();
+  dailyNotes = getDailyNotes();
+  atmosphere = getDailyAtmosphere();
+
+  // Show atmosphere as an opening banner
+  const atmMsg: Record<Atmosphere, string> = {
+    fog:    'A thick fog clings to the island',
+    mist:   'Morning mist drifts through the trees',
+    rain:   'Rain falls softly on the island',
+    golden: 'Golden light fills the island today',
+    clear:  '',
+  };
+  if (atmMsg[atmosphere]) {
+    zoneName      = atmMsg[atmosphere];
+    zoneNameTimer = 220;
+    lastZone      = '__atmosphere__';
+  }
 
   player = {
     x:         save.px,

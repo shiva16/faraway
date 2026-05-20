@@ -293,3 +293,203 @@ export const DISCOVERIES: Discovery[] = [
   { id: 'old_fire',         title: 'Cold ashes, warm cup',     desc: 'Someone else camped here once. Not long ago.',                   symbol: '△' },
   { id: 'hilltop_view',     title: 'The whole island',         desc: 'It looked smaller from up there. Most things do.',               symbol: '◇' },
 ];
+
+// ── Infinite ocean — tiles beyond the fixed map ───────────────────────────────
+
+export function outerTile(gx: number, gy: number): T {
+  // Distance from the island's rectangular boundary
+  const ox = gx < 0 ? -gx : gx >= WORLD_W ? gx - WORLD_W + 1 : 0;
+  const oy = gy < 0 ? -gy : gy >= WORLD_H ? gy - WORLD_H + 1 : 0;
+  const dist = Math.sqrt(ox * ox + oy * oy);
+
+  // Immediate border is always deep water — no abrupt land
+  if (dist < 3) return T.DEEP_WATER;
+
+  // Deterministic archipelago further out — same every visit
+  const nx = gx * 0.09 + 200, ny = gy * 0.09 + 200;
+  const n =
+    Math.sin(nx * 0.78 + ny * 0.52 + 12) * 0.50 +
+    Math.sin(nx * 1.43 + ny * 1.10 + 87) * 0.30 +
+    Math.cos(nx * 0.55 + ny * 0.83 + 44) * 0.20;
+
+  // Threshold rises with distance — far-out islands are rarer
+  const threshold = 0.52 + dist * 0.008;
+  if (n > threshold + 0.18) return T.GRASS;
+  if (n > threshold + 0.09) return T.GRASS_LIGHT;
+  if (n > threshold + 0.02) return T.SAND;
+  if (n > threshold - 0.03) return T.SHALLOW;
+  if (n > threshold - 0.10) return T.WATER;
+  return T.DEEP_WATER;
+}
+
+// ── Daily rotating content ────────────────────────────────────────────────────
+
+export function dateHash(): number {
+  const d   = new Date();
+  const str = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h  = (h * 16777619) >>> 0;
+  }
+  return h;
+}
+
+const DAILY_POOL: Array<{ lines: string[]; spots: [number, number][] }> = [
+  {
+    lines: ['A damp page pinned to a stone.', '"I watched the tide for an hour today.', 'It did not watch back.', 'That was exactly what I needed."'],
+    spots: [[22, 29], [26, 28], [20, 31]],
+  },
+  {
+    lines: ['A folded note under a flat rock:', '"The bird that landed here this morning', 'stayed for four minutes.', 'I counted. It did not."'],
+    spots: [[15, 24], [18, 26], [12, 27]],
+  },
+  {
+    lines: ['Scratched in the sand — almost washed away:', '"Some days the island feels smaller.', 'Some days it goes on forever.', 'Today it was just right."'],
+    spots: [[28, 31], [25, 33], [30, 30]],
+  },
+  {
+    lines: ['A note curled around a small stone:', '"I used to think quiet was the absence of noise.', 'It is not.', 'It is the presence of something else."'],
+    spots: [[8, 20], [6, 22], [10, 19]],
+  },
+  {
+    lines: ['Tucked into a crack in the ruins wall:', '"I have been here before.', 'I will be here again.', 'That is not a sad thing."'],
+    spots: [[33, 14], [29, 18], [34, 17]],
+  },
+  {
+    lines: ['Written in the margin of a waterlogged map:', '"Every island looks tiny from far away.', 'That is a problem of perspective.', 'The island does not mind."'],
+    spots: [[19, 22], [21, 20], [17, 25]],
+  },
+  {
+    lines: ['Pinned to a branch at the grove edge:', '"The moss does not hurry.', 'The lichen does not worry.', 'There may be a lesson here."'],
+    spots: [[11, 14], [14, 10], [16, 13]],
+  },
+  {
+    lines: ['A torn page, folded into a boat shape:', '"Someone once told me that rest', 'is not something you earn.', 'I am still learning to believe them."'],
+    spots: [[25, 29], [23, 32], [27, 30]],
+  },
+  {
+    lines: ['Carved lightly into a cave wall:', '"Day 1: I arrived.', 'Day 2: I noticed things.', 'Day 3: That was enough."'],
+    spots: [[5, 19], [4, 17], [7, 16]],
+  },
+  {
+    lines: ['Floating offshore, caught on a rock:', '"The sea has been here longer than every word', 'I have ever worried about.', 'That helps."'],
+    spots: [[24, 34], [28, 33], [20, 34]],
+  },
+];
+
+export function getDailyNotes(): Interactable[] {
+  const h   = dateHash();
+  const out: Interactable[] = [];
+  const used = new Set<number>();
+
+  for (let slot = 0; slot < 3; slot++) {
+    let idx = (h + slot * 7919) % DAILY_POOL.length;
+    while (used.has(idx)) idx = (idx + 1) % DAILY_POOL.length;
+    used.add(idx);
+
+    const entry    = DAILY_POOL[idx];
+    const spotIdx  = (h + slot * 1031) % entry.spots.length;
+    const [tx, ty] = entry.spots[spotIdx];
+
+    out.push({ id: `daily_${slot}`, tx, ty, range: 1.8, prompt: 'read the note', sprite: 'note', lines: entry.lines });
+  }
+  return out;
+}
+
+export type Atmosphere = 'clear' | 'fog' | 'mist' | 'rain' | 'golden';
+
+export function getDailyAtmosphere(): Atmosphere {
+  const roll = dateHash() % 10;
+  if (roll === 0) return 'rain';
+  if (roll <= 2)  return 'fog';
+  if (roll === 3) return 'mist';
+  if (roll === 4) return 'golden';
+  return 'clear';
+}
+
+// ── Layer 2 — deeper secrets, unlocked after all base discoveries ─────────────
+
+export const LAYER2_INTERACTABLES: Interactable[] = [
+  {
+    id: 'l2_tide_pool',
+    tx: 18, ty: 34,
+    range: 1.8,
+    prompt: 'peer into the tide pool',
+    sprite: 'stone',
+    lines: [
+      'Something is caught in the rock pool.',
+      'A tiny crab. An orange peel.',
+      'A brass button — very old.',
+      'You leave them where you found them.',
+    ],
+    discoveryId: 'l2_tide_pool',
+  },
+  {
+    id: 'l2_hollow_tree',
+    tx: 10, ty: 11,
+    range: 1.8,
+    prompt: 'look inside the hollow',
+    sprite: 'note',
+    lines: [
+      'At the base of the oldest tree: a hollow.',
+      'Inside, a small tin box.',
+      'Inside that: a list of names.',
+      'No other context. Just names.',
+      'You add yours, quietly, in your head.',
+    ],
+    discoveryId: 'l2_hollow_tree',
+  },
+  {
+    id: 'l2_echo_stone',
+    tx: 5, ty: 16,
+    range: 2.0,
+    prompt: 'tap the stone',
+    sprite: 'stone',
+    lines: [
+      'A flat stone near the cave mouth.',
+      'You tap it once.',
+      'Three seconds later, from somewhere deep:',
+      'the same sound, returned.',
+    ],
+    discoveryId: 'l2_echo_stone',
+  },
+  {
+    id: 'l2_ruins_cellar',
+    tx: 29, ty: 15,
+    range: 2.0,
+    prompt: 'descend the steps',
+    sprite: 'stone',
+    lines: [
+      'Steps going down. You follow.',
+      'A small room below the ruins.',
+      'Empty except for light.',
+      'No window — the light has no source.',
+      'You stay until you feel ready to leave.',
+    ],
+    discoveryId: 'l2_ruins_cellar',
+  },
+  {
+    id: 'l2_summit_cairn',
+    tx: 24, ty: 9,
+    range: 2.0,
+    prompt: 'add a stone to the cairn',
+    sprite: 'shrine',
+    lines: [
+      'Near the highest point: a cairn.',
+      'You find a small stone nearby.',
+      'You set it on top.',
+      'It is the smallest thing.',
+      'It counts.',
+    ],
+    discoveryId: 'l2_summit_cairn',
+  },
+];
+
+export const LAYER2_DISCOVERIES: Discovery[] = [
+  { id: 'l2_tide_pool',    title: 'The tide pool',         desc: 'A brass button, an orange peel. You left them.',                  symbol: '○' },
+  { id: 'l2_hollow_tree',  title: 'The list of names',     desc: 'Someone kept names here. You added yours in your head.',          symbol: '§' },
+  { id: 'l2_echo_stone',   title: 'The echo',              desc: 'You tapped. Three seconds later, it answered.',                   symbol: '◉' },
+  { id: 'l2_ruins_cellar', title: 'The sourceless light',  desc: 'A room under the ruins. Light with no window. You waited.',       symbol: '✦' },
+  { id: 'l2_summit_cairn', title: 'One more stone',        desc: 'You added a stone to the cairn. The smallest act.',               symbol: '▴' },
+];
