@@ -1,20 +1,29 @@
 {
   "version": 1,
-  "px": 13.704318116376829,
-  "py": 11.989621055789149,
-  "dir": "left",
+  "px": 21.02543083383344,
+  "py": 28.993432333533818,
+  "dir": "up",
   "discoveries": [
     "old_fire",
     "hilltop_view",
     "bottle",
-    "grove_shrine"
+    "grove_shrine",
+    "ruins_inscription",
+    "ruins_altar",
+    "note_shore"
   ],
   "flags": {
     "used_old_fire": true,
     "used_hilltop_view": true,
     "used_bottle": true,
-    "used_grove_shrine": true
+    "used_grove_shrine": true,
+    "used_ruins_inscription": true,
+    "used_ruins_altar": true,
+    "used_daily_0": true,
+    "used_note_shore": true,
+    "used_daily_2": true,
+    "used_daily_1": true
   },
-  "playTime": 123.01749999996669,
-  "lastSaved": "2026-05-20T15:51:33.400Z"
+  "playTime": 243.03419999999065,
+  "lastSaved": "2026-05-20T15:53:33.415Z"
 }
