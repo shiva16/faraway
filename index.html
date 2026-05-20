@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Faraway</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0d14;
+      overflow: hidden;
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    canvas#game {
+      display: block;
+      position: fixed;
+      inset: 0;
+      image-rendering: pixelated;
+    }
+
+    /* ── Login overlay ── */
+    #login-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0d14;
+      transition: opacity 0.8s ease;
+    }
+    #login-overlay.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Pixel-star canvas behind card */
+    #stars { position: absolute; inset: 0; pointer-events: none; }
+
+    .login-card {
+      position: relative;
+      z-index: 1;
+      width: 360px;
+      padding: 36px 32px 28px;
+      background: #11100a;
+      border: 2px solid #3d2f1a;
+      box-shadow: 0 0 60px rgba(180, 120, 40, 0.12), 0 0 0 1px #1e1a10;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .login-title {
+      text-align: center;
+    }
+    .login-title h1 {
+      font-size: 2.2rem;
+      letter-spacing: 0.22em;
+      color: #d4a853;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+    .login-title p {
+      font-size: 0.72rem;
+      color: #7a6a4a;
+      margin-top: 6px;
+      letter-spacing: 0.1em;
+    }
+
+    .pixel-divider {
+      height: 2px;
+      background: repeating-linear-gradient(
+        to right,
+        #3d2f1a 0px, #3d2f1a 4px,
+        transparent 4px, transparent 8px
+      );
+    }
+
+    label {
+      font-size: 0.7rem;
+      color: #7a6a4a;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    input[type="password"], input[type="text"] {
+      width: 100%;
+      background: #0a0905;
+      border: 1px solid #3d2f1a;
+      color: #d4a853;
+      font-family: inherit;
+      font-size: 0.82rem;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: #8b6830; }
+    input::placeholder { color: #3d2f1a; }
+
+    .login-btn {
+      width: 100%;
+      background: #2a1e0a;
+      border: 2px solid #6b4e20;
+      color: #d4a853;
+      font-family: inherit;
+      font-size: 0.8rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 11px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .login-btn:hover:not(:disabled) {
+      background: #3a2a0e;
+      border-color: #c8843a;
+    }
+    .login-btn:disabled { opacity: 0.4; cursor: default; }
+
+    .login-error {
+      font-size: 0.72rem;
+      color: #c8503a;
+      text-align: center;
+      min-height: 1rem;
+      letter-spacing: 0.05em;
+    }
+
+    .login-hint {
+      font-size: 0.65rem;
+      color: #4a3d28;
+      text-align: center;
+      line-height: 1.6;
+    }
+    .login-hint a { color: #6b5030; }
+
+    /* ── Pixel art wanderer on login ── */
+    .wanderer-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: -8px;
+    }
+    #wanderer-canvas {
+      image-rendering: pixelated;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="login-overlay">
+    <canvas id="stars"></canvas>
+
+    <div class="login-card">
+      <div class="login-title">
+        <h1>Faraway</h1>
+        <p>a tiny island, waiting</p>
+      </div>
+
+      <div class="wanderer-wrap">
+        <canvas id="wanderer-canvas" width="48" height="64"></canvas>
+      </div>
+
+      <div class="pixel-divider"></div>
+
+      <div>
+        <label for="pat-input">GitHub token</label>
+        <input
+          id="pat-input"
+          type="password"
+          placeholder="ghp_••••••••••••••••"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div>
+        <button id="login-btn" class="login-btn" disabled>
+          Set Sail
+        </button>
+        <div class="login-error" id="login-error"></div>
+      </div>
+
+      <p class="login-hint">
+        Your token is used only to save progress<br>to your <code>shiva16/faraway</code> repository.
+      </p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
