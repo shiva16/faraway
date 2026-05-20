@@ -1,10 +1,20 @@
 {
   "version": 1,
-  "px": 24,
-  "py": 30,
-  "dir": "up",
-  "discoveries": [],
-  "flags": {},
-  "playTime": 3.0007999999523154,
-  "lastSaved": "2026-05-20T15:49:33.392Z"
+  "px": 13.704318116376829,
+  "py": 11.989621055789149,
+  "dir": "left",
+  "discoveries": [
+    "old_fire",
+    "hilltop_view",
+    "bottle",
+    "grove_shrine"
+  ],
+  "flags": {
+    "used_old_fire": true,
+    "used_hilltop_view": true,
+    "used_bottle": true,
+    "used_grove_shrine": true
+  },
+  "playTime": 123.01749999996669,
+  "lastSaved": "2026-05-20T15:51:33.400Z"
 }
