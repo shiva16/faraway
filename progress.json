@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "px": 15.462861307738264,
-  "py": 12.351689862029744,
-  "dir": "right",
+  "px": 26.355909838031973,
+  "py": 19.578567546493094,
+  "dir": "up",
   "discoveries": [
     "old_fire",
     "hilltop_view",
@@ -24,8 +24,8 @@
     "used_daily_2": true,
     "used_daily_1": true,
     "dep_w6": 1779352485718,
-    "dep_w3": 1779352487854,
-    "dep_w2": 1779352494585,
+    "dep_w3": 1779352575345,
+    "dep_w2": 1779352581560,
     "dep_c2": 1779352446809,
     "dep_c1": 1779352448457,
     "dep_c3": 1779352439794,
@@ -40,58 +40,35 @@
     "evt_wolf_pack": true,
     "dep_s2": 1779352453380
   },
-  "playTime": 3441.2787000003705,
-  "lastSaved": "2026-05-21T08:35:32.657Z",
+  "playTime": 3561.295400000385,
+  "lastSaved": "2026-05-21T08:37:32.672Z",
   "collectedRunes": [],
   "essence": 100,
   "resources": {
-    "wood": 54,
+    "wood": 53,
     "stone": 3,
     "food": 0,
-    "coin": 17
+    "coin": 7
   },
-  "buildings": [
-    {
-      "id": "shelter_1779352215995",
-      "kind": "shelter",
-      "tx": 23,
-      "ty": 20,
-      "hp": 200,
-      "maxHp": 200
-    },
-    {
-      "id": "water_catchment_1779352310334",
-      "kind": "water_catchment",
-      "tx": 22,
-      "ty": 21,
-      "hp": 150,
-      "maxHp": 150
-    },
-    {
-      "id": "workshop_1779352436355",
-      "kind": "workshop",
-      "tx": 26,
-      "ty": 19,
-      "hp": 200,
-      "maxHp": 200
-    }
-  ],
+  "buildings": [],
   "era": 2,
   "shipParts": [],
-  "hp": 100,
-  "hunger": 43.31234999999905,
-  "sanity": 76.80000000000013,
-  "researched": [],
+  "hp": 0,
+  "hunger": 60.43833499999285,
+  "sanity": 100,
+  "researched": [
+    "archery"
+  ],
   "inventory": [],
   "equippedItem": null,
-  "season": "spring",
-  "seasonTimer": 115.19999999999966,
+  "season": "summer",
+  "seasonTimer": 115.19999999999952,
   "explored": [],
-  "respawnX": 23.819117396520763,
-  "respawnY": 20.156227534494764,
+  "respawnX": 22.926455728853757,
+  "respawnY": 20.836635932815724,
   "enemyCampHp": 400,
   "raidLevel": 4,
-  "dayCount": 7,
+  "dayCount": 8,
   "plantedTiles": {},
   "threatCamps": [
     {
