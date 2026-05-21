@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "px": 26.355909838031973,
-  "py": 19.578567546493094,
+  "px": 22.926455728853757,
+  "py": 20.836635932815724,
   "dir": "up",
   "discoveries": [
     "old_fire",
@@ -40,21 +40,21 @@
     "evt_wolf_pack": true,
     "dep_s2": 1779352453380
   },
-  "playTime": 3567.2682000003592,
-  "lastSaved": "2026-05-21T10:00:53.305Z",
+  "playTime": 3598.5010000003394,
+  "lastSaved": "2026-05-21T10:01:24.550Z",
   "collectedRunes": [],
   "essence": 100,
   "resources": {
-    "wood": 53,
-    "stone": 3,
+    "wood": 42,
+    "stone": 2,
     "food": 0,
-    "coin": 7
+    "coin": 5
   },
   "buildings": [],
   "era": 2,
   "shipParts": [],
-  "hp": 0,
-  "hunger": 58.991284999998754,
+  "hp": 50,
+  "hunger": 53.63244999999983,
   "sanity": 100,
   "researched": [
     "archery"
@@ -62,7 +62,7 @@
   "inventory": [],
   "equippedItem": null,
   "season": "summer",
-  "seasonTimer": 109.41180000002367,
+  "seasonTimer": 78.25890000002518,
   "explored": [],
   "respawnX": 22.926455728853757,
   "respawnY": 20.836635932815724,
