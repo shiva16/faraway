@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "px": 22.75321139771999,
+  "px": 24.152791481703147,
   "py": 20.908115716858916,
   "dir": "right",
   "discoveries": [
@@ -39,17 +39,18 @@
     "dep_w4": 1779352541551,
     "evt_wolf_pack": true,
     "dep_s2": 1779352453380,
-    "used_npc_q_ren": true
+    "used_npc_q_ren": true,
+    "evt_strange_coins": true
   },
-  "playTime": 3701.6421000004825,
-  "lastSaved": "2026-05-21T12:14:45.630Z",
+  "playTime": 3721.508600000503,
+  "lastSaved": "2026-05-21T12:15:05.492Z",
   "collectedRunes": [],
   "essence": 100,
   "resources": {
     "wood": 49,
     "stone": 2,
     "food": 0,
-    "coin": 19
+    "coin": 29
   },
   "buildings": [
     {
@@ -63,8 +64,8 @@
   ],
   "era": 2,
   "shipParts": [],
-  "hp": 50,
-  "hunger": 14.05470999998655,
+  "hp": 46.367399999999925,
+  "hunger": 8.976029999986412,
   "sanity": 100,
   "researched": [
     "archery"
@@ -72,13 +73,13 @@
   "inventory": [],
   "equippedItem": null,
   "season": "autumn",
-  "seasonTimer": 95.53529999999792,
+  "seasonTimer": 75.68719999999614,
   "explored": [],
   "respawnX": 22.926455728853757,
   "respawnY": 20.836635932815724,
   "enemyCampHp": 400,
   "raidLevel": 5,
-  "dayCount": 9,
+  "dayCount": 10,
   "plantedTiles": {},
   "threatCamps": [
     {
@@ -92,6 +93,7 @@
     }
   ],
   "biodiversityLog": [
+    0,
     0,
     0,
     0
