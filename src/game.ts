@@ -132,6 +132,15 @@ let   tJustPressed      = false;
 let   inventoryOpen     = false;
 let   iJustPressed      = false;
 let   craftTarget: BuildingKind | null = null;
+let   infoPanelOpen     = false;
+let   infoPanelPage     = 0;
+let   qJustPressed      = false;
+
+// ── Welcome screen ────────────────────────────────────────────────────────────
+let   welcomeScreen: { isFirst: boolean; alpha: number; timer: number; fadingOut: boolean } | null = null;
+
+// ── Ghost ship (runtime, not persisted) ──────────────────────────────────────
+let   ghostShipInteracted = false;
 
 // ── Fog of war ────────────────────────────────────────────────────────────────
 let   fogGrid: boolean[][] = [];
@@ -1849,6 +1858,318 @@ function drawSpiritHUD() {
   ctx.globalAlpha = 1;
 }
 
+// ── Welcome screen ────────────────────────────────────────────────────────────
+
+function drawWelcomeScreen() {
+  if (!welcomeScreen) return;
+  const ws = welcomeScreen;
+
+  // Tick alpha
+  if (ws.fadingOut) {
+    ws.alpha = Math.max(0, ws.alpha - 0.05);
+    if (ws.alpha <= 0) { welcomeScreen = null; return; }
+  } else {
+    ws.alpha = Math.min(1, ws.alpha + 0.05);
+    if (ws.timer > 0) ws.timer--;
+    else ws.fadingOut = true;
+  }
+
+  ctx.globalAlpha = ws.alpha;
+  ctx.fillStyle = 'rgba(2,6,2,0.92)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+
+  if (ws.isFirst) {
+    ctx.fillStyle = '#28d060';
+    ctx.font = 'bold 26px "Space Mono", "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('FARAWAY', cx, cy - 90);
+
+    ctx.fillStyle = '#163a16';
+    ctx.font = '9px "Space Mono", "Courier New", monospace';
+    ctx.fillText('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', cx, cy - 68);
+
+    ctx.fillStyle = '#80c870';
+    ctx.font = '13px "Space Mono", "Courier New", monospace';
+    ctx.fillText('You wash ashore on an island stripped bare.', cx, cy - 42);
+    ctx.fillText('The forest was here once. So was the life.', cx, cy - 20);
+    ctx.fillText('You are the last Forest Guardian.', cx, cy + 6);
+    ctx.fillText('Everything you plant, build, and restore matters.', cx, cy + 32);
+
+    ctx.fillStyle = '#163a16';
+    ctx.font = '9px "Space Mono", "Courier New", monospace';
+    ctx.fillText('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', cx, cy + 54);
+
+    ctx.fillStyle = '#4a7848';
+    ctx.font = '10px "Space Mono", "Courier New", monospace';
+    ctx.fillText('[H] Help  ·  [?] Guide  ·  [B] Build  ·  [P] Plant species', cx, cy + 76);
+
+    ctx.fillStyle = '#2a4828';
+    ctx.fillText('[ any key to begin ]', cx, cy + 100);
+  } else {
+    ctx.fillStyle = '#40b860';
+    ctx.font = 'bold 18px "Space Mono", "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Welcome back, Guardian.', cx, cy - 50);
+
+    const planted = Object.keys(save.plantedTiles ?? {}).length;
+    const cleared = (save.flags['threats_cleared'] as number | undefined) ?? 0;
+
+    ctx.fillStyle = '#70b850';
+    ctx.font = '12px "Space Mono", "Courier New", monospace';
+    ctx.fillText(`Day ${save.dayCount ?? 0}`, cx, cy - 14);
+    ctx.fillText(`${planted} species tiles planted  ·  Biodiversity ${biodiversityIndex}%`, cx, cy + 12);
+    ctx.fillText(`${cleared} threats cleared  ·  ${save.buildings.length} buildings`, cx, cy + 36);
+
+    ctx.fillStyle = '#2a4228';
+    ctx.font = '10px "Space Mono", "Courier New", monospace';
+    ctx.fillText('[ any key to continue ]', cx, cy + 68);
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+}
+
+// ── Info guide panel ──────────────────────────────────────────────────────────
+
+function drawInfoPanel() {
+  if (!infoPanelOpen) return;
+
+  const W = 420, PAD = 18;
+  const pageData: Array<{ title: string; sections: Array<{ heading: string; rows: Array<[string, string]> }> }> = [
+    {
+      title: 'STORY & ERAS',
+      sections: [
+        {
+          heading: 'THE STORY',
+          rows: [
+            ['You are', 'the Forest Guardian — last steward of a dying island'],
+            ['The island', 'stripped of forest, wildlife gone, land scarred by industry'],
+            ['Your task', 'restore what was taken: plant, build, clear threats, set sail'],
+            ['The truth', 'every species, every zone you restore is real conservation logic'],
+          ],
+        },
+        {
+          heading: 'THE THREE ERAS',
+          rows: [
+            ['Era I: STRANDED',  'Survive. Build Shelter + Workshop to advance'],
+            ['Era II: SETTLED',  'Explore. Build Dock, craft 3 ship parts to advance'],
+            ['Era III: SAILING', 'Press E at Dock → set sail → victory'],
+            ['Escape goal',      'Hull (30W·10S) + Sail (10W·20F) + Compass (5S·15C)'],
+          ],
+        },
+      ],
+    },
+    {
+      title: 'CHARACTERS',
+      sections: [
+        {
+          heading: 'SURVIVORS  (appear when era advances)',
+          rows: [
+            ['Maya the Fisher', 'Era II · Shore (20,33) · Bring 20 food → +50% food yield'],
+            ['Ren the Smith',   'Era II · Ruins (8,20) · Bring 15 stone → +25 base attack'],
+            ['Lena the Healer', 'Era III · Cave (28,20) · Bring 10 coin → medicine unlocked'],
+          ],
+        },
+        {
+          heading: 'ENTITIES',
+          rows: [
+            ['Spirit Fox',   'Night only · Spirit mode (F) · leads to uncollected runes'],
+            ['Ghost Ship',   'Fog days · must build Signal Fire · interact at Signal Fire (E)'],
+            ['Whale',        'Surfaces once · educational popup · ocean restoration fact'],
+            ['Wolves',       'Night only · hunt player · sanity drain · killed by attack/spells'],
+            ['Raiders',      'Spawn from threat camps every 3 days · fight or run'],
+          ],
+        },
+      ],
+    },
+    {
+      title: 'BUILDINGS & ITEMS',
+      sections: [
+        {
+          heading: 'BUILDINGS  (B key, then 1–0 to select)',
+          rows: [
+            ['Shelter',          '20W · Rest: heal + hunger + set respawn. Train villagers (V)'],
+            ['Workshop',         '30W·10S · Tech research (T/E). Train soldiers (Z). Craft tools'],
+            ['Forge',            '20S·10C · +50% gather yield. Craft sword, medicine (Lena needed)'],
+            ['Signal Fire',      '15W · Night sanity boost. Activates ghost ship on fog days'],
+            ['Dock',             '40W·20S · Build + launch ship. Required for escape'],
+            ['Tree Nursery',     '25W·8S·10F · Growth ×1.5. Required for flagship species (CC≥10)'],
+            ['Seed Bank',        '15W·20S·10C · Protects tropicals from winter die-off'],
+            ['Ranger Station',   '30W·15S·5C · Train rangers (R, max 3). ×2 vs threat camps'],
+            ['Water Catchment',  '20W·10S · +50% food near water. Aquatic planting on wetlands'],
+            ['Myco Lab',         '10W·10S·20C · Spread ×2. Network healing. +50% biodiversity'],
+          ],
+        },
+        {
+          heading: 'ITEMS  (I key to open, E key to craft at building)',
+          rows: [
+            ['Iron Axe',        'Workshop · 5W·8S · Wood gathering ×2'],
+            ['Stone Pickaxe',   'Workshop · 8W·5S · Stone + coin ×2'],
+            ['Iron Sword',      'Forge · 5S·10C · +25 attack. Auto-equips on craft'],
+            ['Medicine',        'Forge + Lena skill · 5W·10F·5C · U key: +50 HP'],
+            ['Ration Pack',     'Shelter · 15F · U key: +40 Hunger'],
+          ],
+        },
+      ],
+    },
+    {
+      title: 'TECH & COMBAT',
+      sections: [
+        {
+          heading: 'TECH TREE  (Workshop, press T then E)',
+          rows: [
+            ['Better Tools', '20W·10S · All resource gathering +50%'],
+            ['Archery',      '15W·10C · Soldiers attack at 4-tile range (arrows drawn)'],
+            ['Masonry',      '20S·10F · All building stone costs −25%'],
+          ],
+        },
+        {
+          heading: 'GATHERING BONUSES  (stack multiplicatively)',
+          rows: [
+            ['Forge',         '×1.5 on all nodes'],
+            ['Better Tools',  '×1.5 on all nodes'],
+            ['Iron Axe',      '×2 on wood nodes'],
+            ['Stone Pickaxe', '×2 on stone + coin nodes'],
+            ['Maya skill',    '×1.5 on food nodes'],
+            ['Water Catchment','×1.5 on food nodes within 6 tiles'],
+          ],
+        },
+        {
+          heading: 'COMBAT',
+          rows: [
+            ['Base damage',    '25 (Space key to attack)'],
+            ['+ Sword',        '+25 (equipped from inventory)'],
+            ['+ Ren skill',    '+25 base after quest reward'],
+            ['vs. Threat camp','×2 if Ranger Station within 6 tiles'],
+            ['Spells',         '1=Fire · 2=Water Veil · 3=Earth Pulse · 4=Wind Step'],
+          ],
+        },
+      ],
+    },
+    {
+      title: 'THREATS  (13 real atrocities)',
+      sections: [
+        {
+          heading: 'ERA I THREATS  (appear from day 3+)',
+          rows: [
+            ['🪚 Industrial Logging',   '15 billion trees felled/year · 400HP'],
+            ['🎯 Trophy Hunting Camp',  '126,000 African animals/year · 280HP'],
+            ['🐘 Ivory Poaching Ring',  '55 elephants killed/day at peak · 320HP'],
+            ['🦜 Exotic Wildlife Trade', '$23B/year — 4th largest crime · 260HP'],
+            ['🏭 Ocean Plastic Dumping','8M tonnes/year — 1 truck/minute · 300HP'],
+            ['🔫 Mass Wildlife Slaughter','60M bison → 541 in 89 years · 350HP'],
+          ],
+        },
+        {
+          heading: 'ERA II THREATS  (appear from day 8+)',
+          rows: [
+            ['🔥 Palm Oil Clearing',    '300 football fields/hour · 500HP'],
+            ['🐋 Whaling Vessel',       '3M whales killed in 20th century · 350HP'],
+            ['🦈 Shark Finning',        '73–100 million sharks/year · 300HP'],
+            ['🦏 Rhino Horn Syndicate', '$65,000/kg for keratin (fingernails) · 300HP'],
+            ['☠️ Industrial Pesticide', '75% insect decline in 27 years · 250HP'],
+            ['🎣 Bottom Trawling',      '40% of catch is bycatch, discarded · 320HP'],
+            ['🛣️ Motorway Sprawl',      '70% of forests within 1km of road · 280HP'],
+          ],
+        },
+      ],
+    },
+    {
+      title: 'WORLD & ECOLOGY',
+      sections: [
+        {
+          heading: 'THE WORLD',
+          rows: [
+            ['Day / Night',    'Day = safe · Night = wolves + sanity drain'],
+            ['Signal Fire',    'Stops night sanity drain. Required for ghost ship.'],
+            ['Seasons',        'Spring ×2 growth · Summer normal · Autumn normal'],
+            ['Winter',         'Tropical species die unless Seed Bank is built'],
+            ['Fog days',       'Ghost ship drifts if Signal Fire exists · interact at it'],
+            ['Spirit Realm',   'F key · runes glow · Spirit Fox leads to uncollected ones'],
+            ['Runes',          '4 runes unlock 4 spells: Fire / Water Veil / Earth / Wind'],
+          ],
+        },
+        {
+          heading: 'ECOLOGICAL ROLES  (shown in species catalogue)',
+          rows: [
+            ['pioneer',          'Colonises bare ground — plant these first on bare tiles'],
+            ['keystone',         'Multiplies biodiversity score of nearby species'],
+            ['nitrogen_fixer',   'Adjacent plants grow 50% faster'],
+            ['canopy / emergent','Creates shade layer; allows understory planting'],
+            ['mycorrhizal_host', 'Feeds underground network; benefits from Myco Lab'],
+            ['aquatic',          'Requires water tile or Water Catchment within 6 tiles'],
+            ['coastal_stabiliser','Binds shoreline tiles; prevents erosion'],
+          ],
+        },
+        {
+          heading: 'ZONE STABILITY  (forest zones)',
+          rows: [
+            ['< 3 species', 'Degraded — no passive bonus'],
+            ['3+ species',  'Recovering — zone health climbing'],
+            ['Thriving',    '+2 food +1 wood per game day · trophic cascade popup'],
+            ['Carbon Credits','Earned by planting (2 per tile) · needed for flagship species'],
+          ],
+        },
+      ],
+    },
+  ];
+
+  const page = pageData[infoPanelPage] ?? pageData[0];
+
+  let totalH = PAD * 2 + 26;
+  for (const sec of page.sections) totalH += 22 + sec.rows.length * 18 + 8;
+  totalH += 28;
+  totalH = Math.min(totalH, canvas.height - 60);
+
+  const X = (canvas.width - W) / 2;
+  const Y = (canvas.height - totalH) / 2;
+
+  ctx.fillStyle   = 'rgba(4,8,16,0.97)';
+  ctx.fillRect(X, Y, W, totalH);
+  ctx.strokeStyle = '#3050a0';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(X, Y, W, totalH);
+
+  // Tab nav
+  ctx.fillStyle = '#6080d0';
+  ctx.font = 'bold 11px "Space Mono", "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`◁  ${page.title}  ▷  (${infoPanelPage + 1}/${pageData.length})`, X + W / 2, Y + PAD + 12);
+  ctx.fillStyle = '#406090';
+  ctx.font = '8px "Space Mono", "Courier New", monospace';
+  ctx.fillText('Arrow keys to navigate  ·  Esc to close', X + W / 2, Y + PAD + 24);
+
+  ctx.textAlign = 'left';
+  let sy = Y + PAD + 38;
+
+  for (const sec of page.sections) {
+    ctx.fillStyle = '#4060c0';
+    ctx.font = 'bold 10px "Space Mono", "Courier New", monospace';
+    ctx.fillText(sec.heading, X + PAD, sy);
+    sy += 16;
+    for (const [label, val] of sec.rows) {
+      ctx.fillStyle = '#607898';
+      ctx.font = '10px "Space Mono", "Courier New", monospace';
+      ctx.fillText(label, X + PAD + 8, sy);
+      ctx.fillStyle = '#a0b8e0';
+      const labelW = 140;
+      ctx.fillText(val, X + PAD + 8 + labelW, sy);
+      sy += 18;
+    }
+    sy += 8;
+  }
+
+  // Footer nav hint
+  const pages = pageData.map((_p, i) => i === infoPanelPage ? `[${i+1}]` : `${i+1}`).join(' ');
+  ctx.fillStyle = '#304060';
+  ctx.font = '9px "Space Mono", "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(pages, X + W / 2, Y + totalH - 10);
+  ctx.textAlign = 'left';
+}
+
 function drawHUD() {
   // Discovery count (top left)
   const n          = save.discoveries.length;
@@ -1889,16 +2210,24 @@ function drawHUD() {
   ctx.fillText(timeStr, canvas.width - 18, canvas.height - 14);
   ctx.textAlign  = 'left';
 
-  // Help button [?] (bottom-right, above time)
+  // Help button [H] (bottom-right, above time)
   ctx.fillStyle  = 'rgba(0,0,0,0.5)';
   ctx.fillRect(canvas.width - 36, canvas.height - 58, 28, 22);
-  ctx.strokeStyle = 'rgba(180,150,60,0.5)';
+  ctx.strokeStyle = helpPanelOpen ? 'rgba(220,180,80,0.9)' : 'rgba(180,150,60,0.5)';
   ctx.lineWidth   = 1;
   ctx.strokeRect(canvas.width - 36, canvas.height - 58, 28, 22);
-  ctx.fillStyle  = '#c8a050';
+  ctx.fillStyle  = helpPanelOpen ? '#ffd070' : '#c8a050';
   ctx.font       = '12px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'center';
-  ctx.fillText('?', canvas.width - 22, canvas.height - 42);
+  ctx.fillText('H', canvas.width - 22, canvas.height - 42);
+
+  // Info button [?] (bottom-right, above H)
+  ctx.fillStyle  = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(canvas.width - 36, canvas.height - 86, 28, 22);
+  ctx.strokeStyle = infoPanelOpen ? 'rgba(120,160,255,0.9)' : 'rgba(80,120,200,0.5)';
+  ctx.strokeRect(canvas.width - 36, canvas.height - 86, 28, 22);
+  ctx.fillStyle  = infoPanelOpen ? '#a0c0ff' : '#8090d0';
+  ctx.fillText('?', canvas.width - 22, canvas.height - 70);
   ctx.textAlign  = 'left';
 }
 
@@ -2192,9 +2521,30 @@ function playerAttack(): void {
         const def = THREATS.find(t => t.id === tc.threatId);
         if (def) {
           educationPopup = { lines: def.defeatText, timer: 500 };
-          save.resources.wood  += 30; save.resources.stone += 15; save.resources.coin += 10;
-          save.carbonCredits = (save.carbonCredits ?? 0) + 20;
           eraBannerText  = `✦  ${def.name} DEFEATED  ✦`; eraBannerTimer = 240;
+          // Per-threat loot matching each threat's lootDescription
+          type Loot = { wood?: number; stone?: number; food?: number; coin?: number; cc?: number };
+          const lootTable: Record<string, Loot> = {
+            industrial_logging:       { wood: 30, stone: 15, coin: 10, cc: 20 },
+            palm_oil_clearing:        { coin: 20, cc: 25 },
+            trophy_hunting:           { coin: 15, cc: 20 },
+            whaling_operation:        { food: 30, cc: 20 },
+            shark_finning:            { coin: 15, cc: 20 },
+            elephant_poaching:        { coin: 20, cc: 25 },
+            rhino_poaching:           { coin: 15, cc: 20 },
+            exotic_pet_trade:         { coin: 18, cc: 20 },
+            pesticide_agriculture:    { food: 15, cc: 20 },
+            ocean_plastic:            { coin: 10, cc: 15 },
+            passenger_pigeon_moment:  { food: 20, cc: 25 },
+            deep_sea_trawling:        { food: 20, cc: 20 },
+            habitat_fragmentation:    { stone: 20, cc: 20 },
+          };
+          const loot: Loot = lootTable[tc.threatId] ?? { wood: 30, stone: 15, coin: 10, cc: 20 };
+          if (loot.wood)  save.resources.wood  += loot.wood;
+          if (loot.stone) save.resources.stone += loot.stone;
+          if (loot.food)  save.resources.food  += loot.food;
+          if (loot.coin)  save.resources.coin  += loot.coin;
+          save.carbonCredits = (save.carbonCredits ?? 0) + (loot.cc ?? 20);
         }
         save.enemyCampHp = 0;
         save.flags['threats_cleared'] = ((save.flags['threats_cleared'] as number | undefined) ?? 0) + 1;
@@ -2266,11 +2616,15 @@ function drawEnemyCamp(): void {
 }
 
 function spawnRaid(): void {
+  const liveCamps = (save.threatCamps ?? []).filter(tc => tc.hp > 0);
+  const origin = liveCamps.length > 0
+    ? liveCamps[Math.floor(Math.random() * liveCamps.length)]
+    : { tx: CAMP_X, ty: CAMP_Y };
   const count = Math.min((save.raidLevel ?? 1) + 1, 6);
   for (let i = 0; i < count; i++) {
     raiders.push({
       id: `raider_${Date.now()}_${i}`, kind: 'wolf',
-      x: CAMP_X + (Math.random() - 0.5) * 3, y: CAMP_Y + (Math.random() - 0.5) * 3,
+      x: origin.tx + (Math.random() - 0.5) * 3, y: origin.ty + (Math.random() - 0.5) * 3,
       vx: 0, vy: 0, phase: i * 0.8, state: 'hunt', stateTimer: 0, alive: true, hp: 40, maxHp: 40,
     });
   }
@@ -2281,8 +2635,12 @@ function updateRaiders(dt: number): void {
   const spd = dt / 16.67;
   const isNight = dayTime < 420 || dayTime >= 1020;
   if (!isNight) {
+    const liveCamps = (save.threatCamps ?? []).filter(tc => tc.hp > 0);
     for (const r of raiders) {
-      const dx = CAMP_X - r.x, dy = CAMP_Y - r.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const nearest = liveCamps.sort((a, b) =>
+        Math.sqrt((a.tx - r.x)**2 + (a.ty - r.y)**2) - Math.sqrt((b.tx - r.x)**2 + (b.ty - r.y)**2))[0];
+      const rx = nearest?.tx ?? CAMP_X, ry = nearest?.ty ?? CAMP_Y;
+      const dx = rx - r.x, dy = ry - r.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
       r.x += (dx / d) * 0.06 * spd; r.y += (dy / d) * 0.06 * spd;
       if (d < 1) r.alive = false;
     }
@@ -2447,6 +2805,24 @@ function drawUnits(): void {
     ctx.fillStyle = u.hp > u.maxHp * 0.5 ? '#0c8' : '#f80';
     ctx.fillRect(cx - bw / 2, cy - 13 * s, bw * (u.hp / u.maxHp), 2 * s);
     if (u.selected) { ctx.strokeStyle = '#80ff80'; ctx.lineWidth = s; ctx.beginPath(); ctx.ellipse(cx, cy + 8 * s, 6 * s, 2 * s, 0, 0, Math.PI * 2); ctx.stroke(); }
+
+    // Archery — draw arrow line from soldier to ranged target
+    if (u.kind === 'soldier' && u.task === 'attacking' && save.researched.includes('archery')) {
+      const tgt = [...entities, ...raiders].find(e => e.id === u.taskTarget && e.alive);
+      if (tgt) {
+        const tdist = Math.sqrt((u.x - tgt.x) ** 2 + (u.y - tgt.y) ** 2);
+        if (tdist > 1.5) {
+          const { sx: tx2, sy: ty2 } = worldToScreen(tgt.x, tgt.y);
+          ctx.globalAlpha = 0.55;
+          ctx.strokeStyle = '#d8b050'; ctx.lineWidth = SCALE * 0.6;
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tx2, ty2); ctx.stroke();
+          // Arrowhead dot at target
+          ctx.fillStyle = '#ffd070';
+          ctx.beginPath(); ctx.arc(tx2, ty2, SCALE, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
   }
   for (const tq of trainQueue) {
     const bld = save.buildings.find(b => Math.abs(b.tx - tq.spawnX) < 2);
@@ -2921,6 +3297,8 @@ function plantSpecies(speciesId: string, tx: number, ty: number): boolean {
   if (!def) return false;
   if (!canAfford(save.resources, def.cost)) return false;
   if ((def.carbonCost ?? 0) > 0 && (save.carbonCredits ?? 0) < def.carbonCost!) return false;
+  // Flagship species (CC cost ≥ 10) require a Tree Nursery
+  if ((def.carbonCost ?? 0) >= 10 && !save.buildings.some(b => b.kind === 'tree_nursery')) return false;
   const key = tileKey(tx, ty);
   if ((save.plantedTiles ?? {})[key]) return false; // already planted
 
@@ -3091,11 +3469,17 @@ function drawPlantPanel(): void {
     const cs = Object.entries(def.cost).filter(([,v]) => v > 0).map(([k, v]) => `${v}${k[0].toUpperCase()}`).join('·');
     const ccCost = def.carbonCost ?? 0;
     const canAffordCC = ccCost === 0 || (save.carbonCredits ?? 0) >= ccCost;
-    const ccStr = ccCost > 0 ? ` +${ccCost}✦CC` : '';
-    const fullyAffordable = affordable && canAffordCC;
-    ctx.fillStyle = fullyAffordable ? '#80c040' : !canAffordCC ? '#a050c0' : '#602820';
+    const needsNursery = ccCost >= 10 && !save.buildings.some(b => b.kind === 'tree_nursery');
+    const ccStr = ccCost > 0 ? ` +${ccCost}CC` : '';
+    const fullyAffordable = affordable && canAffordCC && !needsNursery;
     ctx.textAlign = 'right';
-    ctx.fillText(fullyAffordable ? `[click] ${cs}${ccStr}` : `${cs}${ccStr}`, X + W - PAD - 6, ry + 24);
+    if (needsNursery) {
+      ctx.fillStyle = '#806040';
+      ctx.fillText(`🌱 Nursery required`, X + W - PAD - 6, ry + 24);
+    } else {
+      ctx.fillStyle = fullyAffordable ? '#80c040' : !canAffordCC ? '#a050c0' : '#602820';
+      ctx.fillText(fullyAffordable ? `[click] ${cs}${ccStr}` : `${cs}${ccStr}`, X + W - PAD - 6, ry + 24);
+    }
     ctx.textAlign = 'left';
     // Biodiversity score stars
     ctx.fillStyle = '#50a020';
@@ -3497,7 +3881,7 @@ function updateWeather(dt: number) {
   // Ghost ship drifts slowly offshore (fog days) — only after signal fire is built
   if (atmosphere === 'fog' && save.buildings.some(b => b.kind === 'signal_fire')) {
     ghostShipX += 0.004 * spd;
-    if (ghostShipX > WORLD_W + 10) ghostShipX = -12;
+    if (ghostShipX > WORLD_W + 10) { ghostShipX = -12; ghostShipInteracted = false; }
   }
 
   // Whale — trigger once, random time 3–8 min in
@@ -3508,10 +3892,19 @@ function updateWeather(dt: number) {
     whaleTimer -= spd;
     if (whaleTimer <= 0 && !whaleDone) {
       whaleDone = true;
-      // Pick a deep-water spot offshore (south of island)
       whaleX = 20 + Math.floor(Math.abs(Math.sin(save.playTime * 7)) * 10);
       whaleY = WORLD_H + 3;
       whaleAnim = 160;
+      educationPopup = {
+        lines: [
+          '✦ A WHALE SURFACES OFFSHORE',
+          '"The ocean remembers things we have forgotten."',
+          'FACT: A single whale pumps iron-rich nutrients from the deep, fertilising phytoplankton that absorbs as much CO₂ as 1.7 billion trees.',
+          'FACT: 3 million whales were killed in the 20th century. Restoring them is one of the cheapest, highest-impact climate interventions known.',
+          '"She breathes once. Then dives. In her wake, a thousand species thrive."',
+        ],
+        timer: 460,
+      };
     }
   }
   if (whaleAnim > 0) { whaleAnim -= spd; if (whaleAnim < 0) whaleAnim = 0; }
@@ -3626,8 +4019,19 @@ function loop(now: number) {
   if (hJustPressed) {
     hJustPressed = false;
     helpPanelOpen = !helpPanelOpen;
+    infoPanelOpen = false;
     discPanelOpen = false;
     dialogActive  = false;
+  }
+
+  // Info guide toggle (? key)
+  if (qJustPressed) {
+    qJustPressed = false;
+    infoPanelOpen = !infoPanelOpen;
+    helpPanelOpen = false;
+    discPanelOpen = false;
+    dialogActive  = false;
+    if (welcomeScreen && !welcomeScreen.fadingOut) welcomeScreen.fadingOut = true;
   }
 
   // Spirit mode toggle (F key)
@@ -3827,6 +4231,23 @@ function loop(now: number) {
                 gatherResource(node.id);
               } else if (nearDock) {
                 shipCraftMenuOpen = true;
+              } else if (!ghostShipInteracted
+                && ghostShipX > 5 && ghostShipX < WORLD_W - 5
+                && save.buildings.some(b => b.kind === 'signal_fire' &&
+                    Math.sqrt((player.x - b.tx)**2 + (player.y - b.ty)**2) < 2.5)) {
+                // Ghost ship interaction — stand at signal fire while ship is drifting
+                ghostShipInteracted = true;
+                save.resources.coin += 12; save.resources.food += 8;
+                openDialog({
+                  id: 'ghost_ship', tx: player.x, ty: player.y, range: 999, prompt: '',
+                  lines: [
+                    '"A shape in the fog. Not a ship exactly — a memory of one."',
+                    '"They throw down a rope. A wooden box lands on the shore."',
+                    '"Inside: salvaged coin, dried provisions, a coil of rope."',
+                    '"They point toward open water. No words. Then the fog takes them."',
+                    '[+12 coin, +8 food recovered from the crate]',
+                  ],
+                });
               } else if (nearbyInteractable) {
                 openDialog(nearbyInteractable);
               }
@@ -3990,6 +4411,8 @@ function loop(now: number) {
   drawMinimap();
   drawDeath();
   drawVictory();
+  drawInfoPanel();
+  drawWelcomeScreen();
 }
 
 // ── Save trigger ──────────────────────────────────────────────────────────────
@@ -4070,6 +4493,11 @@ export function startGame(
   dailyNotes = getDailyNotes();
   atmosphere = getDailyAtmosphere();
   entities   = spawnEntities();
+  ghostShipInteracted = false;
+  infoPanelOpen = false; infoPanelPage = 0;
+  // Welcome screen
+  const isFirstVisit = (save.dayCount ?? 0) === 0 && save.buildings.length === 0;
+  welcomeScreen = { isFirst: isFirstVisit, alpha: 0, timer: isFirstVisit ? 320 : 220, fadingOut: false };
   // Reset whale for this session
   whaleDone  = false;
   whaleTimer = 0;
@@ -4131,6 +4559,7 @@ export function startGame(
     }
     if (e.key === 'Tab') { e.preventDefault(); discPanelOpen = !discPanelOpen; dialogActive = false; helpPanelOpen = false; }
     if (e.key === 'h' || e.key === 'H') { hJustPressed = true; }
+    if (e.key === '?') { qJustPressed = true; }
     if (e.key === 'b' || e.key === 'B') { bJustPressed = true; }
     if (e.key === 't' || e.key === 'T') { tJustPressed = true; }
     if (e.key === 'i' || e.key === 'I') { iJustPressed = true; }
@@ -4139,6 +4568,10 @@ export function startGame(
     if (e.key === ' ') { e.preventDefault(); spaceJustPressed = true; }
     if (plantMode && e.key === 'ArrowRight') speciesPanelPage++;
     if (plantMode && e.key === 'ArrowLeft')  speciesPanelPage = Math.max(0, speciesPanelPage - 1);
+    if (infoPanelOpen && e.key === 'ArrowRight') infoPanelPage = Math.min(5, infoPanelPage + 1);
+    if (infoPanelOpen && e.key === 'ArrowLeft')  infoPanelPage = Math.max(0, infoPanelPage - 1);
+    // Dismiss welcome screen on any key
+    if (welcomeScreen && !welcomeScreen.fadingOut) welcomeScreen.fadingOut = true;
     if (e.key === 'v' || e.key === 'V') {
       // Train villager at nearest shelter
       const sh = save.buildings.find(b => b.kind === 'shelter' &&
@@ -4160,7 +4593,7 @@ export function startGame(
       }
     }
     if (e.key === 'Escape') {
-      dialogActive = false; discPanelOpen = false; helpPanelOpen = false;
+      dialogActive = false; discPanelOpen = false; helpPanelOpen = false; infoPanelOpen = false;
       buildMode = false; selectedBuildKind = null; shipCraftMenuOpen = false;
       techPanelOpen = false; inventoryOpen = false;
       plantMode = false; selectedSpeciesId = null;
@@ -4210,12 +4643,23 @@ export function startGame(
 
   // Click handler: unit selection + build placement + help button
   canvas.addEventListener('click', e => {
-    // [?] button
+    // [H] help button
     const bx = canvas.width - 36, by = canvas.height - 58;
     if (e.clientX >= bx && e.clientX <= bx + 28 && e.clientY >= by && e.clientY <= by + 22) {
       helpPanelOpen = !helpPanelOpen;
+      infoPanelOpen = false;
       discPanelOpen = false;
       dialogActive  = false;
+      return;
+    }
+    // [?] info guide button
+    const ix = canvas.width - 36, iy = canvas.height - 86;
+    if (e.clientX >= ix && e.clientX <= ix + 28 && e.clientY >= iy && e.clientY <= iy + 22) {
+      infoPanelOpen = !infoPanelOpen;
+      helpPanelOpen = false;
+      discPanelOpen = false;
+      dialogActive  = false;
+      if (welcomeScreen && !welcomeScreen.fadingOut) welcomeScreen.fadingOut = true;
       return;
     }
 
