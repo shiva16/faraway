@@ -317,6 +317,16 @@ loginBtn.addEventListener('click', async () => {
     const { save, sha } = await loadSave(token);
     const resolvedSave: SaveState = save ?? defaultSave();
 
+    // If a local draft is newer than the cloud save, prefer it (handles tab-close mid-session)
+    try {
+      const draftStr  = localStorage.getItem('faraway_draft');
+      const draftTime = parseInt(localStorage.getItem('faraway_draft_time') ?? '0', 10);
+      const cloudTime = new Date(resolvedSave.lastSaved ?? 0).getTime();
+      if (draftStr && draftTime > cloudTime + 3000) {
+        Object.assign(resolvedSave, JSON.parse(draftStr));
+      }
+    } catch { /* ignore malformed draft */ }
+
     // Restoration line completes on successful login
     restoreProgress = 1;
     loginBtn.textContent = 'The forest remembers you.';

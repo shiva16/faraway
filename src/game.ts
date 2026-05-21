@@ -557,7 +557,7 @@ function drawResourceNodes() {
       ctx.lineWidth   = 1;
       ctx.strokeRect(px2, py2, pw, 28);
       ctx.fillStyle   = '#d4c890';
-      ctx.font        = '12px "Courier New", monospace';
+      ctx.font        = '12px "Space Mono", "Courier New", monospace';
       ctx.textAlign   = 'center';
       ctx.fillText(prompt, canvas.width / 2, py2 + 18);
       ctx.textAlign   = 'left';
@@ -830,11 +830,11 @@ function drawBuildMode() {
   ctx.strokeRect(PX, PY, PW, PH);
 
   ctx.fillStyle = '#c8a040';
-  ctx.font = 'bold 11px "Courier New", monospace';
+  ctx.font = 'bold 11px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center';
   ctx.fillText('BUILD  MODE', PX + PW / 2, PY + PAD + 10);
   ctx.fillStyle = '#4a3820';
-  ctx.font = '9px "Courier New", monospace';
+  ctx.font = '9px "Space Mono", "Courier New", monospace';
   ctx.fillText('keys 1–9, 0  ·  Enter = place here', PX + PW / 2, PY + PAD + 24);
   ctx.textAlign = 'left';
 
@@ -864,18 +864,18 @@ function drawBuildMode() {
 
     // Key badge
     ctx.fillStyle = active ? '#d4a820' : affordable && !alreadyBuilt ? '#a08030' : '#403820';
-    ctx.font = 'bold 9px "Courier New", monospace';
+    ctx.font = 'bold 9px "Space Mono", "Courier New", monospace';
     ctx.fillText(keyLabel, PX + PAD + 4, ry + 16);
 
     // Building name
     ctx.fillStyle = alreadyBuilt ? '#504838' : affordable ? '#d4c880' : '#604830';
-    ctx.font = (active ? 'bold ' : '') + '10px "Courier New", monospace';
+    ctx.font = (active ? 'bold ' : '') + '10px "Space Mono", "Courier New", monospace';
     ctx.fillText(def.label, PX + PAD + 28, ry + 16);
 
     // Cost or status
     if (alreadyBuilt) {
       ctx.fillStyle = '#3a3020';
-      ctx.font = '9px "Courier New", monospace';
+      ctx.font = '9px "Space Mono", "Courier New", monospace';
       ctx.textAlign = 'right';
       ctx.fillText('built', PX + PW - PAD - 2, ry + 16);
     } else {
@@ -885,7 +885,7 @@ function drawBuildMode() {
       if (effCost.food  > 0) cp.push(`${effCost.food}F`);
       if (effCost.coin  > 0) cp.push(`${effCost.coin}C`);
       ctx.fillStyle = affordable ? '#a08030' : '#502818';
-      ctx.font = '9px "Courier New", monospace';
+      ctx.font = '9px "Space Mono", "Courier New", monospace';
       ctx.textAlign = 'right';
       ctx.fillText(cp.join(' '), PX + PW - PAD - 2, ry + 16);
     }
@@ -897,13 +897,13 @@ function drawBuildMode() {
   if (selectedBuildKind) {
     const selDef = BUILDING_DEFS.find(d => d.kind === selectedBuildKind)!;
     ctx.fillStyle = '#7ad860';
-    ctx.font = 'bold 10px "Courier New", monospace';
+    ctx.font = 'bold 10px "Space Mono", "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(`${selDef.label} — Enter to place at feet`, PX + PW / 2, PY + PH - 9);
     ctx.textAlign = 'left';
   } else {
     ctx.fillStyle = '#3a3020';
-    ctx.font = '9px "Courier New", monospace';
+    ctx.font = '9px "Space Mono", "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText('[Esc] cancel  ·  click map to place', PX + PW / 2, PY + PH - 9);
     ctx.textAlign = 'left';
@@ -926,7 +926,7 @@ function drawShipCraftPanel() {
   ctx.strokeRect(X, Y, W, H);
 
   ctx.fillStyle  = '#80aad0';
-  ctx.font       = 'bold 13px "Courier New", monospace';
+  ctx.font       = 'bold 13px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'center';
   ctx.fillText('DOCK  —  BUILD YOUR SHIP', X + W / 2, Y + PAD + 12);
   ctx.textAlign  = 'left';
@@ -941,16 +941,16 @@ function drawShipCraftPanel() {
     ctx.strokeRect(X + PAD, ry, W - PAD * 2, 46);
 
     ctx.fillStyle = done ? '#60c860' : '#c8d4e0';
-    ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.font = 'bold 11px "Space Mono", "Courier New", monospace';
     ctx.fillText((done ? '✓  ' : '   ') + part.label, X + PAD + 10, ry + 16);
     ctx.fillStyle = done ? '#408840' : '#607888';
-    ctx.font = '9px "Courier New", monospace';
+    ctx.font = '9px "Space Mono", "Courier New", monospace';
     ctx.fillText(part.desc, X + PAD + 10, ry + 29);
 
     if (!done) {
       const affordable = canAfford(save.resources, part.cost);
       ctx.fillStyle = affordable ? '#a0c820' : '#604030';
-      ctx.font = '10px "Courier New", monospace';
+      ctx.font = '10px "Space Mono", "Courier New", monospace';
       ctx.textAlign = 'right';
       ctx.fillText(affordable ? '[ E ] craft' : 'need resources', X + W - PAD - 8, ry + 22);
       ctx.textAlign = 'left';
@@ -960,13 +960,13 @@ function drawShipCraftPanel() {
 
   if (save.shipParts.length === SHIP_PARTS.length) {
     ctx.fillStyle = '#c8a020';
-    ctx.font = 'bold 12px "Courier New", monospace';
+    ctx.font = 'bold 12px "Space Mono", "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText('[ E ] SET SAIL — leave the island', X + W / 2, Y + H - 16);
     ctx.textAlign = 'left';
   } else {
     ctx.fillStyle = '#405060';
-    ctx.font = '10px "Courier New", monospace';
+    ctx.font = '10px "Space Mono", "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText('[ Esc ] close', X + W / 2, Y + H - 16);
     ctx.textAlign = 'left';
@@ -992,7 +992,7 @@ function drawVictory() {
   // Stars
   drawStars();
 
-  const W = 420, H = 300;
+  const W = 420, H = 360;
   const X = (canvas.width - W) / 2;
   const Y = (canvas.height - H) / 2;
 
@@ -1003,12 +1003,12 @@ function drawVictory() {
   ctx.strokeRect(X, Y, W, H);
 
   ctx.fillStyle = '#80c0ff';
-  ctx.font = 'bold 18px "Courier New", monospace';
+  ctx.font = 'bold 18px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center';
   ctx.fillText('You escaped Faraway.', X + W / 2, Y + 50);
 
   ctx.fillStyle = '#4a7090';
-  ctx.font = '11px "Courier New", monospace';
+  ctx.font = '11px "Space Mono", "Courier New", monospace';
   ctx.fillText('The sea was waiting. You were ready.', X + W / 2, Y + 72);
 
   const mins  = Math.floor(save.playTime / 60);
@@ -1019,12 +1019,14 @@ function drawVictory() {
     ['Runes collected',    `${save.collectedRunes.length} / 4`],
     ['Buildings erected',  `${save.buildings.length}`],
     ['Era reached',        save.era === 3 ? 'Ready to Sail' : save.era === 2 ? 'Settled' : 'Stranded'],
+    ['Biodiversity peak',  `${Math.max(...(save.biodiversityLog.length ? save.biodiversityLog : [0]), Math.round(biodiversityIndex))}%`],
+    ['Threats cleared',    `${(save.flags['threats_cleared'] as number | undefined) ?? 0}`],
   ];
 
   let sy = Y + 110;
   for (const [label, val] of stats) {
     ctx.fillStyle = '#405870';
-    ctx.font = '11px "Courier New", monospace';
+    ctx.font = '11px "Space Mono", "Courier New", monospace';
     ctx.textAlign = 'left';
     ctx.fillText(label, X + 40, sy);
     ctx.fillStyle = '#c0d8f0';
@@ -1039,7 +1041,7 @@ function drawVictory() {
   ctx.fillRect(X + 40, Y + H - 56, 150, 30);
   ctx.strokeRect(X + 40, Y + H - 56, 150, 30);
   ctx.fillStyle = '#a0c8e0';
-  ctx.font = '11px "Courier New", monospace';
+  ctx.font = '11px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center';
   ctx.fillText('[ R ] Sail back', X + 115, Y + H - 36);
 
@@ -1066,7 +1068,7 @@ function drawEraBanner() {
   ctx.lineWidth   = 2;
   ctx.strokeRect(canvas.width / 2 - tw / 2, canvas.height / 2 - 30, tw, 40);
   ctx.fillStyle   = '#d4a853';
-  ctx.font        = 'bold 16px "Courier New", monospace';
+  ctx.font        = 'bold 16px "Space Mono", "Courier New", monospace';
   ctx.textAlign   = 'center';
   ctx.fillText(eraBannerText, canvas.width / 2, canvas.height / 2 - 5);
   ctx.globalAlpha = 1;
@@ -1081,7 +1083,7 @@ function drawGatherFlash() {
   const alpha = timer / 60;
   ctx.globalAlpha = alpha;
   ctx.fillStyle   = resourceColor(kind);
-  ctx.font        = 'bold 14px "Courier New", monospace';
+  ctx.font        = 'bold 14px "Space Mono", "Courier New", monospace';
   ctx.textAlign   = 'center';
   ctx.fillText(`+${amount} ${resourceIcon(kind)}`, sx, sy - (1 - alpha) * 20);
   ctx.globalAlpha = 1;
@@ -1104,7 +1106,7 @@ function drawResourceHUD() {
     const x = startX + i * (W + PAD);
     const val = save.resources[kind];
     ctx.fillStyle = resourceColor(kind);
-    ctx.font = 'bold 10px "Courier New", monospace';
+    ctx.font = 'bold 10px "Space Mono", "Courier New", monospace';
     ctx.fillText(`${labels[i]}:${val}`, x + 4, startY + 15);
   });
 
@@ -1114,7 +1116,7 @@ function drawResourceHUD() {
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(startX, startY + H + 4, 150, 18);
   ctx.fillStyle = eraColors[save.era];
-  ctx.font = '9px "Courier New", monospace';
+  ctx.font = '9px "Space Mono", "Courier New", monospace';
   ctx.fillText(`Era: ${eraLabels[save.era]}`, startX + 6, startY + H + 16);
 }
 
@@ -1189,7 +1191,7 @@ function drawRunes() {
       ctx.lineWidth   = 1;
       ctx.strokeRect(px2, py2, pw, 28);
       ctx.fillStyle   = color[rune.kind];
-      ctx.font        = '12px "Courier New", monospace';
+      ctx.font        = '12px "Space Mono", "Courier New", monospace';
       ctx.textAlign   = 'center';
       ctx.fillText(prompt, canvas.width / 2, py2 + 18);
       ctx.textAlign   = 'left';
@@ -1514,7 +1516,7 @@ function drawZoneBanner() {
   const w = ctx.measureText(zoneName).width + 32;
   ctx.fillRect(canvas.width / 2 - w / 2, 28, w, 28);
   ctx.fillStyle   = '#d4c890';
-  ctx.font        = '14px "Courier New", monospace';
+  ctx.font        = '14px "Space Mono", "Courier New", monospace';
   ctx.textAlign   = 'center';
   ctx.fillText(zoneName, canvas.width / 2, 47);
   ctx.globalAlpha = 1;
@@ -1534,7 +1536,7 @@ function drawInteractPrompt() {
   ctx.lineWidth   = 1;
   ctx.strokeRect(x, y, w, 28);
   ctx.fillStyle   = '#d4c890';
-  ctx.font        = '12px "Courier New", monospace';
+  ctx.font        = '12px "Space Mono", "Courier New", monospace';
   ctx.textAlign   = 'center';
   ctx.fillText(prompt, canvas.width / 2, y + 18);
   ctx.textAlign   = 'left';
@@ -1553,14 +1555,14 @@ function drawDialog() {
 
   const lines = dialogLines[dialogPage]?.split('\n') ?? [];
   ctx.fillStyle   = '#d4c890';
-  ctx.font        = '13px "Courier New", monospace';
+  ctx.font        = '13px "Space Mono", "Courier New", monospace';
   lines.forEach((line, i) => {
     ctx.fillText(line, PAD + 18, BY + 28 + i * 22);
   });
 
   const hasMore = dialogPage < dialogLines.length - 1;
   ctx.fillStyle  = '#7a6838';
-  ctx.font       = '11px "Courier New", monospace';
+  ctx.font       = '11px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'right';
   ctx.fillText(hasMore ? '[ E ] continue' : '[ E ] close', PAD + BW - 14, BY + BH - 12);
   ctx.textAlign  = 'left';
@@ -1587,13 +1589,13 @@ function drawDiscoveries() {
   ctx.strokeRect(X, Y, W, H);
 
   ctx.fillStyle   = '#d4a853';
-  ctx.font        = 'bold 13px "Courier New", monospace';
+  ctx.font        = 'bold 13px "Space Mono", "Courier New", monospace';
   ctx.textAlign   = 'center';
   ctx.fillText(`DISCOVERIES  ${found.length}/${allDiscs.length}`, X + W / 2, Y + 28);
 
   if (layer2Active) {
     ctx.fillStyle = '#8a6830';
-    ctx.font      = '10px "Courier New", monospace';
+    ctx.font      = '10px "Space Mono", "Courier New", monospace';
     ctx.fillText('✦  deeper secrets revealed  ✦', X + W / 2, Y + 46);
   }
 
@@ -1603,25 +1605,25 @@ function drawDiscoveries() {
     ctx.fillStyle  = '#3a2e18';
     ctx.fillRect(X + PAD, ry, W - PAD * 2, 36);
     ctx.fillStyle  = '#c8a050';
-    ctx.font       = '16px "Courier New", monospace';
+    ctx.font       = '16px "Space Mono", "Courier New", monospace';
     ctx.fillText(d.symbol, X + PAD + 10, ry + 23);
     ctx.fillStyle  = '#d4c890';
-    ctx.font       = '12px "Courier New", monospace';
+    ctx.font       = '12px "Space Mono", "Courier New", monospace';
     ctx.fillText(d.title, X + PAD + 34, ry + 14);
     ctx.fillStyle  = '#7a6838';
-    ctx.font       = '10px "Courier New", monospace';
+    ctx.font       = '10px "Space Mono", "Courier New", monospace';
     ctx.fillText(d.desc.length > 42 ? d.desc.slice(0, 42) + '…' : d.desc, X + PAD + 34, ry + 28);
   });
 
   if (found.length === 0) {
     ctx.fillStyle = '#4a3d20';
-    ctx.font      = '11px "Courier New", monospace';
+    ctx.font      = '11px "Space Mono", "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText('Nothing discovered yet. Keep wandering.', X + W / 2, Y + H / 2);
   }
 
   ctx.fillStyle  = '#4a3d20';
-  ctx.font       = '10px "Courier New", monospace';
+  ctx.font       = '10px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'center';
   ctx.fillText('[ Tab ] close', X + W / 2, Y + H - 12);
   ctx.textAlign  = 'left';
@@ -1642,11 +1644,15 @@ function drawHelp() {
     {
       heading: 'ACTIONS',
       rows: [
-        ['E',   'Interact / gather resource / collect rune'],
-        ['B',   'Open build mode (place buildings)'],
-        ['Tab', 'Open discoveries journal'],
-        ['F',   'Toggle Spirit Realm'],
-        ['Esc', 'Close any panel / cancel build'],
+        ['E',        'Interact / gather resource / collect rune'],
+        ['B',        'Open build mode (place buildings)'],
+        ['I / T',    'Inventory / Tech research (at Workshop)'],
+        ['U',        'Use consumable (medicine first, then ration)'],
+        ['V / Z',    'Train villager (Shelter) / soldier (Workshop)'],
+        ['R',        'Train ranger at Ranger Station (max 3)'],
+        ['Tab',      'Open discoveries journal'],
+        ['F',        'Toggle Spirit Realm'],
+        ['Esc',      'Close any panel / cancel build'],
       ],
     },
     {
@@ -1725,8 +1731,8 @@ function drawHelp() {
       heading: 'TIPS',
       rows: [
         ['Night',          'Wolves emerge; Spirit Fox appears'],
-        ['Fog days',       'Ghost ship drifts offshore'],
-        ['Forge built',    '+50% on all resource gathering'],
+        ['Fog + Signal Fire', 'Ghost ship drifts offshore — build Signal Fire first'],
+        ['Forge built',    '+50% gather; stacks with axe ×2, pickaxe ×2, Maya ×1.5'],
         ['Spirit mode (F)','Reveals hidden runes → spells'],
       ],
     },
@@ -1750,14 +1756,14 @@ function drawHelp() {
   ctx.strokeRect(X, Y, W, totalH);
 
   ctx.fillStyle  = '#d4a853';
-  ctx.font       = 'bold 13px "Courier New", monospace';
+  ctx.font       = 'bold 13px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'center';
   ctx.fillText('FARAWAY  —  HOW TO PLAY', X + W / 2, Y + PAD + 12);
 
   let rowY = Y + PAD + 30;
   for (const sec of sections) {
     ctx.fillStyle  = '#8a6830';
-    ctx.font       = 'bold 10px "Courier New", monospace';
+    ctx.font       = 'bold 10px "Space Mono", "Courier New", monospace';
     ctx.textAlign  = 'left';
     ctx.fillText(sec.heading, X + PAD, rowY);
     rowY += 16;
@@ -1765,7 +1771,7 @@ function drawHelp() {
       ctx.fillStyle = 'rgba(30,22,8,0.7)';
       ctx.fillRect(X + PAD, rowY - 12, W - PAD * 2, 16);
       ctx.fillStyle = '#c8a050';
-      ctx.font      = '11px "Courier New", monospace';
+      ctx.font      = '11px "Space Mono", "Courier New", monospace';
       ctx.fillText(key, X + PAD + 6, rowY);
       ctx.fillStyle = '#9a8860';
       ctx.fillText(desc, X + PAD + 148, rowY);
@@ -1775,7 +1781,7 @@ function drawHelp() {
   }
 
   ctx.fillStyle  = '#4a3d20';
-  ctx.font       = '10px "Courier New", monospace';
+  ctx.font       = '10px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'center';
   ctx.fillText('[ H ] or [ ? ] or [ Esc ] close', X + W / 2, Y + totalH - 10);
   ctx.textAlign  = 'left';
@@ -1800,7 +1806,7 @@ function drawEssenceBar() {
 
   // Label
   ctx.fillStyle  = 'rgba(200,220,255,0.5)';
-  ctx.font       = '9px "Courier New", monospace';
+  ctx.font       = '9px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'center';
   ctx.fillText('essence', canvas.width / 2, by - 4);
   ctx.textAlign  = 'left';
@@ -1820,7 +1826,7 @@ function drawEssenceBar() {
     ctx.fillStyle = canCast ? runeColors[kind] : 'rgba(100,100,100,0.5)';
     ctx.fillRect(ix, iy, 20, 16);
     ctx.fillStyle = '#000';
-    ctx.font      = '8px "Courier New", monospace';
+    ctx.font      = '8px "Space Mono", "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(key, ix + 10, iy + 11);
     ctx.textAlign = 'left';
@@ -1836,7 +1842,7 @@ function drawSpiritHUD() {
   const tw = label.length * 7.5 + 20;
   ctx.fillRect(canvas.width / 2 - tw / 2, 10, tw, 22);
   ctx.fillStyle = '#c090ff';
-  ctx.font      = '11px "Courier New", monospace';
+  ctx.font      = '11px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center';
   ctx.fillText(label, canvas.width / 2, 25);
   ctx.textAlign  = 'left';
@@ -1852,7 +1858,7 @@ function drawHUD() {
   ctx.fillStyle  = 'rgba(0,0,0,0.5)';
   ctx.fillRect(14, 14, 120, 24);
   ctx.fillStyle  = '#7a6838';
-  ctx.font       = '11px "Courier New", monospace';
+  ctx.font       = '11px "Space Mono", "Courier New", monospace';
   ctx.fillText(`◇ ${n}/${totalDiscs} found   [Tab]`, 22, 30);
 
   // Save status (top right)
@@ -1863,7 +1869,7 @@ function drawHUD() {
     const tw = saveStatus.length * 7 + 20;
     ctx.fillRect(canvas.width - tw - 14, 14, tw, 24);
     ctx.fillStyle   = '#6a9850';
-    ctx.font        = '11px "Courier New", monospace';
+    ctx.font        = '11px "Space Mono", "Courier New", monospace';
     ctx.fillText(saveStatus, canvas.width - tw - 4, 30);
     ctx.globalAlpha = 1;
   }
@@ -1878,7 +1884,7 @@ function drawHUD() {
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(canvas.width - timeW - 12, canvas.height - 30, timeW, 22);
   ctx.fillStyle  = '#c8b060';
-  ctx.font       = '11px "Courier New", monospace';
+  ctx.font       = '11px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'right';
   ctx.fillText(timeStr, canvas.width - 18, canvas.height - 14);
   ctx.textAlign  = 'left';
@@ -1890,7 +1896,7 @@ function drawHUD() {
   ctx.lineWidth   = 1;
   ctx.strokeRect(canvas.width - 36, canvas.height - 58, 28, 22);
   ctx.fillStyle  = '#c8a050';
-  ctx.font       = '12px "Courier New", monospace';
+  ctx.font       = '12px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'center';
   ctx.fillText('?', canvas.width - 22, canvas.height - 42);
   ctx.textAlign  = 'left';
@@ -2152,9 +2158,9 @@ function playerAttack(): void {
   if (attackCooldown > 0) return;
   const swordBonus = save.equippedItem === 'sword' ? 25 : 0;
   const smithBonus = (save.flags['ren_skill'] as boolean) ? 25 : 0;
-  const rangerBonus = save.buildings.some(b => b.kind === 'ranger_station' &&
-    Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 6) ? 10 : 0;
-  const dmg = 25 + swordBonus + smithBonus + rangerBonus;
+  const hasRangerNearby = save.buildings.some(b => b.kind === 'ranger_station' &&
+    Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 6);
+  const dmg = 25 + swordBonus + smithBonus;
   attackCooldown = 30;
   attackFlash    = 10;
   attackDirX = player.dir === 'left' ? -1 : player.dir === 'right' ? 1 : 0;
@@ -2175,26 +2181,27 @@ function playerAttack(): void {
       }
     }
   }
-  // Also damage nearby threat camps
+  // Also damage nearby threat camps (ranger station doubles damage vs camps)
   for (const tc of (save.threatCamps ?? [])) {
     const dx = tc.tx - player.x, dy = tc.ty - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 2.5) {
-      tc.hp = Math.max(0, tc.hp - dmg);
+      const campDmg = hasRangerNearby ? dmg * 2 : dmg;
+      tc.hp = Math.max(0, tc.hp - campDmg);
       if (tc.hp <= 0) {
         const def = THREATS.find(t => t.id === tc.threatId);
         if (def) {
           educationPopup = { lines: def.defeatText, timer: 500 };
-          // Drop loot
           save.resources.wood  += 30; save.resources.stone += 15; save.resources.coin += 10;
           save.carbonCredits = (save.carbonCredits ?? 0) + 20;
           eraBannerText  = `✦  ${def.name} DEFEATED  ✦`; eraBannerTimer = 240;
         }
-        // Also clear old enemyCampHp
         save.enemyCampHp = 0;
+        save.flags['threats_cleared'] = ((save.flags['threats_cleared'] as number | undefined) ?? 0) + 1;
       }
     }
   }
+  if (save.threatCamps) save.threatCamps = save.threatCamps.filter(tc => tc.hp > 0);
   if (audioCtx) {
     const osc = audioCtx.createOscillator(); const g = audioCtx.createGain();
     osc.type = 'sawtooth'; osc.frequency.value = 200;
@@ -2242,7 +2249,7 @@ function drawEnemyCamp(): void {
       const barW = 30 * s;
       ctx.fillStyle = '#400'; ctx.fillRect(cx - barW / 2, cy - 14 * s, barW, 3 * s);
       ctx.fillStyle = '#c83030'; ctx.fillRect(cx - barW / 2, cy - 14 * s, barW * (tc.hp / tc.maxHp), 3 * s);
-      ctx.fillStyle = '#d8c8a8'; ctx.font = '8px "Courier New", monospace';
+      ctx.fillStyle = '#d8c8a8'; ctx.font = '8px "Space Mono", "Courier New", monospace';
       ctx.textAlign = 'center';
       ctx.fillText(`${def?.icon ?? '⚠'} ${def?.name ?? 'Enemy Camp'}`, cx, cy - 16 * s);
       ctx.textAlign = 'left';
@@ -2253,7 +2260,7 @@ function drawEnemyCamp(): void {
     const { sx, sy } = worldToScreen(CAMP_X, CAMP_Y);
     const cx = sx + TILE_PX / 2, cy = sy + TILE_PX / 2, s = SCALE;
     ctx.fillStyle = '#1e1418'; ctx.beginPath(); ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#c8c8a0'; ctx.font = '8px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#c8c8a0'; ctx.font = '8px "Space Mono", "Courier New", monospace'; ctx.textAlign = 'center';
     ctx.fillText('Enemy Camp', cx, cy); ctx.textAlign = 'left';
   }
 }
@@ -2388,7 +2395,8 @@ function updateSurvival(dt: number): void {
   if (day > lastDayCount) {
     lastDayCount = day;
     save.dayCount = (save.dayCount ?? 0) + 1;
-    if (save.dayCount % 3 === 0 && (save.enemyCampHp ?? 400) > 0 && (save.raidLevel ?? 1) < 6)
+    const anyThreatAlive = (save.threatCamps ?? []).some(tc => tc.hp > 0);
+    if (save.dayCount % 3 === 0 && anyThreatAlive && (save.raidLevel ?? 1) < 6)
       save.raidLevel = (save.raidLevel ?? 1) + 1;
     if (Math.random() < 0.4) {
       const eligible = RANDOM_EVENTS.filter(e => e.minDay <= (save.dayCount ?? 0) && !save.flags[`evt_${e.id}`]);
@@ -2409,7 +2417,7 @@ function updateSurvival(dt: number): void {
       if (!npcsActive.includes(npc.id) && npc.spawnEra <= save.era) npcsActive.push(npc.id);
     }
     // Spawn raid at first night of new day
-    if ((save.enemyCampHp ?? 400) > 0) spawnRaid();
+    if (anyThreatAlive) spawnRaid();
     // Maybe spawn a new threat camp based on era + day progression
     maybeSpawnThreats();
   }
@@ -2467,7 +2475,7 @@ function drawSurvivalHUD(): void {
     const by3 = by2 + i * (BAR_H + GAP);
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(bx - 2, by3 - 2, BAR_W + 4, BAR_H + 4);
     ctx.fillStyle = col; ctx.fillRect(bx, by3, BAR_W * pct, BAR_H);
-    ctx.fillStyle = '#c0a080'; ctx.font = '8px "Courier New", monospace';
+    ctx.fillStyle = '#c0a080'; ctx.font = '8px "Space Mono", "Courier New", monospace';
     ctx.fillText(label, bx + BAR_W + 6, by3 + 6);
   });
 }
@@ -2533,13 +2541,14 @@ function drawMinimap(): void {
   }
   ctx.fillStyle = '#c8a020';
   for (const b of save.buildings) ctx.fillRect(MX + b.tx * sx2 - 1, MY + b.ty * sy2 - 1, 3, 3);
-  if ((save.enemyCampHp ?? 400) > 0) { ctx.fillStyle = '#c82020'; ctx.fillRect(MX + CAMP_X * sx2 - 2, MY + CAMP_Y * sy2 - 2, 4, 4); }
+  ctx.fillStyle = '#c82020';
+  for (const tc of (save.threatCamps ?? [])) { if (tc.hp > 0) ctx.fillRect(MX + tc.tx * sx2 - 2, MY + tc.ty * sy2 - 2, 4, 4); }
   ctx.fillStyle = '#40c840';
   for (const u of units) { if (!u.alive) continue; ctx.fillRect(MX + u.x * sx2 - 1, MY + u.y * sy2 - 1, 2, 2); }
   ctx.fillStyle = '#ff8020';
   for (const r of raiders) { if (!r.alive) continue; ctx.fillRect(MX + r.x * sx2 - 1, MY + r.y * sy2 - 1, 2, 2); }
   ctx.fillStyle = '#fff'; ctx.fillRect(MX + player.x * sx2 - 2, MY + player.y * sy2 - 2, 4, 4);
-  ctx.fillStyle = '#6a5828'; ctx.font = '8px "Courier New", monospace'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#6a5828'; ctx.font = '8px "Space Mono", "Courier New", monospace'; ctx.textAlign = 'center';
   ctx.fillText('MAP', MX + MW / 2, MY + MH + 10); ctx.textAlign = 'left';
 }
 
@@ -2551,7 +2560,7 @@ function drawTechPanel(): void {
   const X = (canvas.width - W) / 2, Y = (canvas.height - H) / 2;
   ctx.fillStyle = 'rgba(6,4,1,0.96)'; ctx.fillRect(X, Y, W, H);
   ctx.strokeStyle = '#6a5020'; ctx.lineWidth = 2; ctx.strokeRect(X, Y, W, H);
-  ctx.fillStyle = '#d4a853'; ctx.font = 'bold 13px "Courier New", monospace';
+  ctx.fillStyle = '#d4a853'; ctx.font = 'bold 13px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center'; ctx.fillText('WORKSHOP — TECH RESEARCH', X + W / 2, Y + PAD + 12); ctx.textAlign = 'left';
   let ry = Y + PAD + 28;
   for (const tech of TECH_DEFS) {
@@ -2560,9 +2569,9 @@ function drawTechPanel(): void {
     ctx.fillStyle = done ? 'rgba(20,40,20,0.8)' : 'rgba(20,18,10,0.8)';
     ctx.fillRect(X + PAD, ry, W - PAD * 2, 56);
     ctx.strokeStyle = done ? '#40a840' : '#6a5020'; ctx.lineWidth = 1; ctx.strokeRect(X + PAD, ry, W - PAD * 2, 56);
-    ctx.fillStyle = done ? '#60c860' : '#d4c890'; ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.fillStyle = done ? '#60c860' : '#d4c890'; ctx.font = 'bold 11px "Space Mono", "Courier New", monospace';
     ctx.fillText((done ? '✓ ' : '') + tech.label, X + PAD + 10, ry + 16);
-    ctx.fillStyle = '#8a7848'; ctx.font = '9px "Courier New", monospace'; ctx.fillText(tech.desc, X + PAD + 10, ry + 30);
+    ctx.fillStyle = '#8a7848'; ctx.font = '9px "Space Mono", "Courier New", monospace'; ctx.fillText(tech.desc, X + PAD + 10, ry + 30);
     if (!done) {
       const cs = [tech.cost.wood > 0 ? `${tech.cost.wood}W` : '', tech.cost.stone > 0 ? `${tech.cost.stone}S` : '', tech.cost.food > 0 ? `${tech.cost.food}F` : '', tech.cost.coin > 0 ? `${tech.cost.coin}C` : ''].filter(Boolean).join('·');
       ctx.fillStyle = affordable ? '#c8a020' : '#603828'; ctx.textAlign = 'right';
@@ -2570,7 +2579,7 @@ function drawTechPanel(): void {
     }
     ry += 64;
   }
-  ctx.fillStyle = '#4a3d20'; ctx.font = '10px "Courier New", monospace';
+  ctx.fillStyle = '#4a3d20'; ctx.font = '10px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center'; ctx.fillText('[T] or [Esc] close', X + W / 2, Y + H - 12); ctx.textAlign = 'left';
 }
 
@@ -2583,11 +2592,11 @@ function drawInventoryPanel(): void {
   const X = (canvas.width - W) / 2, Y = (canvas.height - H) / 2;
   ctx.fillStyle = 'rgba(4,4,8,0.97)'; ctx.fillRect(X, Y, W, H);
   ctx.strokeStyle = '#304860'; ctx.lineWidth = 2; ctx.strokeRect(X, Y, W, H);
-  ctx.fillStyle = '#80aad0'; ctx.font = 'bold 12px "Courier New", monospace';
+  ctx.fillStyle = '#80aad0'; ctx.font = 'bold 12px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center';
   ctx.fillText(craftTarget ? `${craftTarget.toUpperCase().replace('_', ' ')} — CRAFT` : 'INVENTORY', X + W / 2, Y + PAD + 12);
   const inv = save.inventory ?? [];
-  ctx.fillStyle = '#405870'; ctx.font = '9px "Courier New", monospace';
+  ctx.fillStyle = '#405870'; ctx.font = '9px "Space Mono", "Courier New", monospace';
   ctx.fillText(`Carrying: ${inv.length ? inv.map(i => `${i.kind}×${i.qty}`).join(' ') : 'empty'}`, X + W / 2, Y + PAD + 26);
   ctx.textAlign = 'left';
   let ry = Y + PAD + 36;
@@ -2596,9 +2605,9 @@ function drawInventoryPanel(): void {
     const affordable = canAfford(save.resources, def.cost);
     ctx.fillStyle = 'rgba(16,20,30,0.8)'; ctx.fillRect(X + PAD, ry, W - PAD * 2, 46);
     ctx.strokeStyle = '#304060'; ctx.lineWidth = 1; ctx.strokeRect(X + PAD, ry, W - PAD * 2, 46);
-    ctx.fillStyle = '#c0d4f0'; ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.fillStyle = '#c0d4f0'; ctx.font = 'bold 11px "Space Mono", "Courier New", monospace';
     ctx.fillText(def.label + (owned ? ` (×${owned.qty})` : ''), X + PAD + 10, ry + 16);
-    ctx.fillStyle = '#607888'; ctx.font = '9px "Courier New", monospace'; ctx.fillText(def.desc, X + PAD + 10, ry + 29);
+    ctx.fillStyle = '#607888'; ctx.font = '9px "Space Mono", "Courier New", monospace'; ctx.fillText(def.desc, X + PAD + 10, ry + 29);
     const cs = [def.cost.wood > 0 ? `${def.cost.wood}W` : '', def.cost.stone > 0 ? `${def.cost.stone}S` : '', def.cost.food > 0 ? `${def.cost.food}F` : '', def.cost.coin > 0 ? `${def.cost.coin}C` : ''].filter(Boolean).join('·');
     let rightText: string; let rightColor: string;
     if (owned && (def.kind === 'medicine' || def.kind === 'ration')) {
@@ -2612,7 +2621,7 @@ function drawInventoryPanel(): void {
     ctx.fillText(rightText, X + W - PAD - 8, ry + 22); ctx.textAlign = 'left';
     ry += 54;
   }
-  ctx.fillStyle = '#304050'; ctx.font = '10px "Courier New", monospace';
+  ctx.fillStyle = '#304050'; ctx.font = '10px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center'; ctx.fillText('[I] or [Esc] close', X + W / 2, Y + H - 12); ctx.textAlign = 'left';
 }
 
@@ -2629,7 +2638,7 @@ function drawNPCs(): void {
     ctx.beginPath(); ctx.ellipse(cx, cy + 2 * s, 5 * s, 8 * s, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#c89060'; ctx.beginPath(); ctx.arc(cx, cy - 5 * s, 4 * s, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(cx - 18, cy - 16 * s, 36, 12);
-    ctx.fillStyle = '#d4c890'; ctx.font = '8px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#d4c890'; ctx.font = '8px "Space Mono", "Courier New", monospace'; ctx.textAlign = 'center';
     ctx.fillText(def.name, cx, cy - 16 * s + 9); ctx.textAlign = 'left';
     const dx = player.x - def.tx, dy = player.y - def.ty;
     if (Math.sqrt(dx * dx + dy * dy) < 2) {
@@ -2637,7 +2646,7 @@ function drawNPCs(): void {
       const pw = prompt.length * 8 + 24, px2 = canvas.width / 2 - pw / 2, py2 = canvas.height - 54;
       ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(px2, py2, pw, 28);
       ctx.strokeStyle = '#6080a0'; ctx.lineWidth = 1; ctx.strokeRect(px2, py2, pw, 28);
-      ctx.fillStyle = '#d4c890'; ctx.font = '12px "Courier New", monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#d4c890'; ctx.font = '12px "Space Mono", "Courier New", monospace'; ctx.textAlign = 'center';
       ctx.fillText(prompt, canvas.width / 2, py2 + 18); ctx.textAlign = 'left';
     }
   }
@@ -2653,7 +2662,7 @@ function drawRaidWarning(): void {
     const msg = '⚔  RAIDERS FROM THE NORTHWEST  ⚔';
     const tw = msg.length * 7.5 + 30;
     ctx.fillRect(canvas.width / 2 - tw / 2, 60, tw, 28);
-    ctx.fillStyle = '#ff6060'; ctx.font = '12px "Courier New", monospace';
+    ctx.fillStyle = '#ff6060'; ctx.font = '12px "Space Mono", "Courier New", monospace';
     ctx.textAlign = 'center'; ctx.fillText(msg, canvas.width / 2, 79); ctx.globalAlpha = 1; ctx.textAlign = 'left';
   }
   if (pendingEvent && eventBannerTimer < 300) {
@@ -2665,7 +2674,7 @@ function drawRaidWarning(): void {
     const t2 = msg.length > 70 ? msg.slice(0, 67) + '…' : msg;
     const tw = t2.length * 6.5 + 24;
     ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(canvas.width / 2 - tw / 2, 96, tw, 26);
-    ctx.fillStyle = col; ctx.font = '10px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = col; ctx.font = '10px "Space Mono", "Courier New", monospace'; ctx.textAlign = 'center';
     ctx.fillText(t2, canvas.width / 2, 113); ctx.globalAlpha = 1; ctx.textAlign = 'left';
     if (eventBannerTimer >= 300) pendingEvent = null;
   }
@@ -2678,9 +2687,9 @@ function drawDeath(): void {
   deathFade = Math.min(1, deathFade + 0.02);
   ctx.fillStyle = `rgba(0,0,0,${deathFade})`; ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (deathFade >= 1) {
-    ctx.fillStyle = '#c03030'; ctx.font = 'bold 20px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#c03030'; ctx.font = 'bold 20px "Space Mono", "Courier New", monospace'; ctx.textAlign = 'center';
     ctx.fillText('You fell.', canvas.width / 2, canvas.height / 2 - 20);
-    ctx.fillStyle = '#806060'; ctx.font = '12px "Courier New", monospace';
+    ctx.fillStyle = '#806060'; ctx.font = '12px "Space Mono", "Courier New", monospace';
     ctx.fillText('Lost 20% resources.', canvas.width / 2, canvas.height / 2 + 10);
     ctx.fillText('[ R ] Respawn at shelter', canvas.width / 2, canvas.height / 2 + 36);
     ctx.textAlign = 'left';
@@ -2876,6 +2885,10 @@ function updateForest(dt: number): void {
       save.resources.wood = (save.resources.wood ?? 0) + thrivingCount;
     }
 
+    // Log biodiversity snapshot for victory screen
+    save.biodiversityLog.push(Math.round(biodiversityIndex));
+    if (save.biodiversityLog.length > 60) save.biodiversityLog.shift();
+
     // Feed zone health back to individual tile health
     for (const [key, pt] of Object.entries(save.plantedTiles ?? {})) {
       const [tx, ty] = key.split(',').map(Number);
@@ -2974,7 +2987,7 @@ function drawForestLayer(): void {
       // Warning icon centre of zone
       const mx = sx + zw / 2, my = sy + zh / 2;
       ctx.fillStyle = `rgba(200,80,30,${0.4 + pulse * 0.4})`;
-      ctx.font = '11px "Courier New", monospace';
+      ctx.font = '11px "Space Mono", "Courier New", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('✗', mx, my + 4);
       ctx.textAlign = 'left';
@@ -3048,10 +3061,10 @@ function drawPlantPanel(): void {
   ctx.fillStyle = 'rgba(2,10,2,0.97)'; ctx.fillRect(X, Y, W, H);
   ctx.strokeStyle = '#204810'; ctx.lineWidth = 2; ctx.strokeRect(X, Y, W, H);
 
-  ctx.fillStyle = '#50c050'; ctx.font = 'bold 12px "Courier New", monospace';
+  ctx.fillStyle = '#50c050'; ctx.font = 'bold 12px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center';
   ctx.fillText('✦  PLANT SPECIES CATALOGUE  ✦', X + W / 2, Y + PAD + 12);
-  ctx.fillStyle = '#304820'; ctx.font = '9px "Courier New", monospace';
+  ctx.fillStyle = '#304820'; ctx.font = '9px "Space Mono", "Courier New", monospace';
   ctx.fillText(`Biodiversity Index: ${biodiversityIndex}%  ·  Carbon Credits: ${save.carbonCredits ?? 0}  ·  Page ${speciesPanelPage + 1}/${pageCount}`, X + W / 2, Y + PAD + 27);
 
   ctx.textAlign = 'left';
@@ -3067,12 +3080,12 @@ function drawPlantPanel(): void {
     ctx.fillStyle = def.spriteTint;
     ctx.fillRect(X + PAD + 6, ry + 6, 8, ROW - 16);
     // Name + scientific
-    ctx.fillStyle = '#b0e890'; ctx.font = 'bold 10px "Courier New", monospace';
+    ctx.fillStyle = '#b0e890'; ctx.font = 'bold 10px "Space Mono", "Courier New", monospace';
     ctx.fillText(def.commonName, X + PAD + 22, ry + 14);
-    ctx.fillStyle = '#507840'; ctx.font = 'italic 8px "Courier New", monospace';
+    ctx.fillStyle = '#507840'; ctx.font = 'italic 8px "Space Mono", "Courier New", monospace';
     ctx.fillText(def.scientificName, X + PAD + 22, ry + 25);
     // Family
-    ctx.fillStyle = '#406030'; ctx.font = '8px "Courier New", monospace';
+    ctx.fillStyle = '#406030'; ctx.font = '8px "Space Mono", "Courier New", monospace';
     ctx.fillText(`${def.family} · ${def.ecologicalRoles[0].replace('_', ' ')}`, X + PAD + 22, ry + 36);
     // Cost
     const cs = Object.entries(def.cost).filter(([,v]) => v > 0).map(([k, v]) => `${v}${k[0].toUpperCase()}`).join('·');
@@ -3089,7 +3102,7 @@ function drawPlantPanel(): void {
     ctx.fillText('★'.repeat(Math.round(def.biodiversityScore / 2)), X + PAD + 22, ry + 47);
     ry += ROW;
   }
-  ctx.fillStyle = '#1a3010'; ctx.textAlign = 'center'; ctx.font = '9px "Courier New", monospace';
+  ctx.fillStyle = '#1a3010'; ctx.textAlign = 'center'; ctx.font = '9px "Space Mono", "Courier New", monospace';
   ctx.fillText('[←][→] page  ·  [click species] select  ·  [click world] plant  ·  [P] close', X + W / 2, Y + H - 10);
   ctx.textAlign = 'left';
 }
@@ -3102,7 +3115,7 @@ function drawBiodiversityHUD(): void {
   const col = pct < 0.25 ? '#803010' : pct < 0.5 ? '#a07010' : pct < 0.75 ? '#60a030' : '#20e040';
   ctx.fillStyle = col; ctx.fillRect(x, y, Math.round(W * pct), H);
   ctx.strokeStyle = '#204810'; ctx.lineWidth = 1; ctx.strokeRect(x, y, W, H);
-  ctx.fillStyle = '#90d060'; ctx.font = '8px "Courier New", monospace';
+  ctx.fillStyle = '#90d060'; ctx.font = '8px "Space Mono", "Courier New", monospace';
   ctx.textAlign = 'center';
   ctx.fillText(`Biodiversity ${biodiversityIndex}%  ·  CC:${save.carbonCredits ?? 0}`, x + W / 2, y + 10);
 
@@ -3139,7 +3152,7 @@ function drawEducationPopup(): void {
   for (let i = 0; i < lines.length; i++) {
     const isFact = lines[i].startsWith('"FACT:');
     ctx.fillStyle = isFact ? '#a0e070' : '#d0eca0';
-    ctx.font = isFact ? 'bold 9px "Courier New", monospace' : 'italic 10px "Courier New", monospace';
+    ctx.font = isFact ? 'bold 9px "Space Mono", "Courier New", monospace' : 'italic 10px "Space Mono", "Courier New", monospace';
     // Word wrap
     let line = lines[i];
     if (line.length > 62) line = line.slice(0, 60) + '…';
@@ -3200,6 +3213,7 @@ function placeBuilding(kind: BuildingKind, tx: number, ty: number) {
   deductCost(save.resources, effectiveCost);
   save.buildings.push({ id: `${kind}_${Date.now()}`, kind, tx, ty, hp: def.maxHp, maxHp: def.maxHp });
   checkEraAdvance();
+  triggerSave();
 }
 
 function checkEraAdvance() {
@@ -3235,6 +3249,7 @@ function craftShipPart(partId: string) {
     lines: [part.flavorText],
   });
   checkEraAdvance();
+  triggerSave();
 }
 
 // ── Entity AI ─────────────────────────────────────────────────────────────────
@@ -3752,6 +3767,7 @@ function loop(now: number) {
           deductCost(save.resources, tech.cost);
           save.researched.push(tech.id as any);
           eraBannerText = `✦  ${tech.label} researched  ✦`; eraBannerTimer = 180;
+          triggerSave();
         }
       }
     } else if (inventoryOpen && craftTarget) {
@@ -3988,6 +4004,8 @@ function triggerSave() {
       saveSha         = sha;
       saveStatus      = '✓ saved';
       saveStatusTimer = 90;
+      localStorage.removeItem('faraway_draft');
+      localStorage.removeItem('faraway_draft_time');
     })
     .catch(() => {
       saveStatus      = '✗ save failed';
@@ -4133,6 +4151,14 @@ export function startGame(
         Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 3);
       if (ws) queueTrain('soldier', save, ws.tx, ws.ty);
     }
+    if (e.key === 'r' || e.key === 'R') {
+      if (!isDead && escapePhase === 0) {
+        const rs = save.buildings.find(b => b.kind === 'ranger_station' &&
+          Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 3);
+        if (rs && units.filter(u => u.alive && u.kind === 'soldier').length < 3)
+          queueTrain('soldier', save, rs.tx, rs.ty);
+      }
+    }
     if (e.key === 'Escape') {
       dialogActive = false; discPanelOpen = false; helpPanelOpen = false;
       buildMode = false; selectedBuildKind = null; shipCraftMenuOpen = false;
@@ -4275,6 +4301,26 @@ export function startGame(
     lastAutoSave = performance.now();
     triggerSave();
   }, 3000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      cancelAnimationFrame(rafId);
+      save.px = player.x; save.py = player.y; save.dir = player.dir;
+      localStorage.setItem('faraway_draft', JSON.stringify(save));
+      localStorage.setItem('faraway_draft_time', Date.now().toString());
+      triggerSave();
+    } else {
+      lastRealTime = performance.now();
+      lastTime     = lastRealTime;
+      rafId = requestAnimationFrame(loop);
+    }
+  });
+
+  window.addEventListener('beforeunload', () => {
+    save.px = player.x; save.py = player.y; save.dir = player.dir;
+    localStorage.setItem('faraway_draft', JSON.stringify(save));
+    localStorage.setItem('faraway_draft_time', Date.now().toString());
+  });
 
   lastRealTime = performance.now();
   lastTime     = lastRealTime;
