@@ -40,8 +40,8 @@
     "evt_wolf_pack": true,
     "dep_s2": 1779352453380
   },
-  "playTime": 3561.295400000385,
-  "lastSaved": "2026-05-21T08:37:32.672Z",
+  "playTime": 3564.2803000003873,
+  "lastSaved": "2026-05-21T09:30:19.985Z",
   "collectedRunes": [],
   "essence": 100,
   "resources": {
@@ -54,7 +54,7 @@
   "era": 2,
   "shipParts": [],
   "hp": 0,
-  "hunger": 60.43833499999285,
+  "hunger": 59.70460999999283,
   "sanity": 100,
   "researched": [
     "archery"
@@ -62,7 +62,7 @@
   "inventory": [],
   "equippedItem": null,
   "season": "summer",
-  "seasonTimer": 115.19999999999952,
+  "seasonTimer": 112.26509999999966,
   "explored": [],
   "respawnX": 22.926455728853757,
   "respawnY": 20.836635932815724,
