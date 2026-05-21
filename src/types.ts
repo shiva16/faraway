@@ -18,12 +18,12 @@ export const enum T {
 }
 
 export interface TileDef {
-  base: string;   // base fill color
-  alt?: string;   // alternate color for checker variation
+  base: string;
+  alt?: string;
   passable: boolean;
-  dark?: boolean; // draw with dim overlay (cave/deep forest)
-  wet?: boolean;  // animate
-  zone?: string;  // zone name shown when entering
+  dark?: boolean;
+  wet?: boolean;
+  zone?: string;
 }
 
 // ── World ─────────────────────────────────────────────────────────────────────
@@ -36,11 +36,11 @@ export const WORLD_H = 36;
 export type Dir = 'up' | 'down' | 'left' | 'right';
 
 export interface Player {
-  x: number;   // fractional tile position (center)
+  x: number;
   y: number;
   dir: Dir;
   moving: boolean;
-  frame: number;   // walk frame 0-3
+  frame: number;
   frameTimer: number;
 }
 
@@ -48,13 +48,13 @@ export interface Player {
 
 export interface Interactable {
   id: string;
-  tx: number;     // tile X (center)
-  ty: number;     // tile Y
-  range: number;  // interaction range in tiles
-  prompt: string; // "Press E to ..."
-  lines: string[]; // dialog lines (paginated)
+  tx: number;
+  ty: number;
+  range: number;
+  prompt: string;
+  lines: string[];
   discoveryId?: string;
-  sprite?: string; // visual marker ('bottle', 'chest', 'note', 'stone', 'fire', 'shrine')
+  sprite?: string;
 }
 
 // ── Discoveries ───────────────────────────────────────────────────────────────
@@ -63,7 +63,40 @@ export interface Discovery {
   id: string;
   title: string;
   desc: string;
-  symbol: string; // 1-2 char icon for pixel art display
+  symbol: string;
+}
+
+// ── Entities ──────────────────────────────────────────────────────────────────
+
+export type EntityKind = 'deer' | 'bird' | 'wolf' | 'fox';
+
+export interface Entity {
+  id: string;
+  kind: EntityKind;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  phase: number;     // wander/animation offset
+  state: 'idle' | 'wander' | 'flee' | 'hunt' | 'lead';
+  stateTimer: number;
+  alive: boolean;
+  // bird flock index
+  flock?: number;
+}
+
+// ── Spells ────────────────────────────────────────────────────────────────────
+
+export type RuneKind = 'fire' | 'water' | 'earth' | 'wind';
+
+export interface ActiveSpell {
+  kind: RuneKind;
+  timer: number;     // frames remaining
+  // fire orb position
+  ox?: number;
+  oy?: number;
+  ovx?: number;
+  ovy?: number;
 }
 
 // ── Save state ────────────────────────────────────────────────────────────────
@@ -75,13 +108,15 @@ export interface SaveState {
   dir: Dir;
   discoveries: string[];
   flags: Record<string, boolean>;
-  playTime: number;   // seconds
+  playTime: number;
   lastSaved: string;
+  collectedRunes: RuneKind[];
+  essence: number;
 }
 
 export function defaultSave(): SaveState {
   return {
-    version: 1,
+    version: 2,
     px: 24,
     py: 30,
     dir: 'up',
@@ -89,5 +124,7 @@ export function defaultSave(): SaveState {
     flags: {},
     playTime: 0,
     lastSaved: new Date().toISOString(),
+    collectedRunes: [],
+    essence: 100,
   };
 }

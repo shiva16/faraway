@@ -1,9 +1,10 @@
 import { T, WORLD_W, WORLD_H } from './types';
-import type { TileDef, Player, Interactable, SaveState } from './types';
+import type { TileDef, Player, Interactable, SaveState, Entity, RuneKind, ActiveSpell } from './types';
 import {
   TILE_DEFS, buildWorld, INTERACTABLES, DISCOVERIES,
   outerTile, getDailyNotes, getDailyAtmosphere,
   LAYER2_INTERACTABLES, LAYER2_DISCOVERIES,
+  RUNES, RUNE_DISCOVERIES, spawnEntities,
 } from './world';
 import type { Atmosphere } from './world';
 
@@ -26,7 +27,9 @@ let saveSha: string | null = null;
 let onSave: (s: SaveState, sha: string | null) => Promise<string>;
 
 const keys: Record<string, boolean> = {};
-let eJustPressed = false;
+let eJustPressed  = false;
+let fJustPressed  = false;
+let spellKeyPress: RuneKind | null = null;
 
 // Dialog
 let dialogLines: string[]   = [];
@@ -53,6 +56,36 @@ let nearbyInteractable: Interactable | null = null;
 // Daily rotating content + atmosphere
 let dailyNotes: Interactable[] = [];
 let atmosphere: Atmosphere     = 'clear';
+
+// ── Spirit realm ──────────────────────────────────────────────────────────────
+let spiritMode   = false;
+let spiritAlpha  = 0;  // 0-1, animated blend
+
+// ── Entities ─────────────────────────────────────────────────────────────────
+let entities: Entity[] = [];
+
+// ── Active spells ─────────────────────────────────────────────────────────────
+let activeSpells: ActiveSpell[] = [];
+let waterVeilTimer  = 0;    // frames remaining
+let windStepTimer   = 0;
+let spellCooldown   = 0;    // brief cooldown to avoid double-cast
+
+// ── Essence ───────────────────────────────────────────────────────────────────
+const ESSENCE_MAX    = 100;
+let essenceFlash     = 0;   // red screen flash timer (wolf hit)
+
+// ── Weather events ────────────────────────────────────────────────────────────
+let lightningTimer      = 0;   // frames until next lightning check
+let lightningFlash      = 0;   // flash frames remaining
+let thunderScheduled    = false;
+let whaleDone           = false;
+let whaleTimer          = 0;   // frames until whale; 0 = not yet triggered
+let whaleAnim           = 0;   // 0 = not active; >0 = frames remaining
+let whaleX              = 0;
+let whaleY              = 0;
+
+// ── Ghost ship ────────────────────────────────────────────────────────────────
+let ghostShipX  = -8.0;   // tile X (starts off-screen left)
 
 // Rain particles (screen-space, animated by wavePhase)
 const RAINDROPS = Array.from({ length: 200 }, (_, i) => ({
@@ -319,6 +352,346 @@ function drawPlayer() {
   }
 }
 
+// ── Spirit realm overlay ─────────────────────────────────────────────────────
+
+function drawSpiritOverlay() {
+  if (spiritAlpha <= 0) return;
+  // Deep indigo tint
+  ctx.fillStyle   = `rgba(30,10,80,${spiritAlpha * 0.42})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Luminescent shimmer on water tiles
+  const startX = Math.floor(player.x - canvas.width  / 2 / TILE_PX) - 1;
+  const startY = Math.floor(player.y - canvas.height / 2 / TILE_PX) - 1;
+  const endX   = startX + Math.ceil(canvas.width  / TILE_PX) + 3;
+  const endY   = startY + Math.ceil(canvas.height / TILE_PX) + 3;
+  for (let ty = startY; ty <= endY; ty++) {
+    for (let tx = startX; tx <= endX; tx++) {
+      const t = tileAt(tx, ty);
+      if (t !== T.WATER && t !== T.SHALLOW && t !== T.DEEP_WATER && t !== T.SHALLOW_DARK) continue;
+      const { sx, sy } = worldToScreen(tx, ty);
+      const glow = (Math.sin(wavePhase * 1.4 + tx * 0.5 + ty * 0.3) * 0.5 + 0.5);
+      ctx.fillStyle = `rgba(80,160,255,${spiritAlpha * glow * 0.22})`;
+      ctx.fillRect(sx, sy, TILE_PX, TILE_PX);
+    }
+  }
+}
+
+function drawRunes() {
+  for (const rune of RUNES) {
+    if (save.collectedRunes.includes(rune.kind)) continue;
+    // Runes only visible in spirit mode
+    const vis = spiritAlpha;
+    if (vis < 0.05) continue;
+    const { sx, sy } = worldToScreen(rune.tx, rune.ty);
+    if (sx < -TILE_PX || sx > canvas.width + TILE_PX) continue;
+    const cx = sx + TILE_PX / 2;
+    const cy = sy + TILE_PX / 2;
+    const s  = SCALE;
+    const pulse = (Math.sin(wavePhase * 2.2 + rune.tx) * 0.5 + 0.5);
+    const color: Record<RuneKind, string> = {
+      fire: '#ff6030', water: '#30aaff', earth: '#60cc40', wind: '#ffffa0',
+    };
+    ctx.globalAlpha = vis * (0.7 + pulse * 0.3);
+    // Glow halo
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, TILE_PX * 0.8);
+    grad.addColorStop(0, color[rune.kind]);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, TILE_PX * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    // Core glyph — diamond
+    ctx.fillStyle = color[rune.kind];
+    ctx.save();
+    ctx.translate(cx, cy - 2 * s);
+    ctx.rotate(Math.PI / 4 + wavePhase * 0.5);
+    ctx.fillRect(-3 * s, -3 * s, 6 * s, 6 * s);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    // Collection prompt if player is close in spirit mode
+    const dx = player.x - rune.tx, dy = player.y - rune.ty;
+    if (spiritMode && Math.sqrt(dx * dx + dy * dy) < 1.8) {
+      const nameMap: Record<RuneKind, string> = { fire: 'Fire', water: 'Water', earth: 'Earth', wind: 'Wind' };
+      const prompt = `[ E ] claim the ${nameMap[rune.kind]} Rune`;
+      const pw = prompt.length * 8 + 24;
+      const px2 = canvas.width / 2 - pw / 2;
+      const py2 = canvas.height - 54;
+      ctx.fillStyle  = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(px2, py2, pw, 28);
+      ctx.strokeStyle = color[rune.kind];
+      ctx.lineWidth   = 1;
+      ctx.strokeRect(px2, py2, pw, 28);
+      ctx.fillStyle   = color[rune.kind];
+      ctx.font        = '12px "Courier New", monospace';
+      ctx.textAlign   = 'center';
+      ctx.fillText(prompt, canvas.width / 2, py2 + 18);
+      ctx.textAlign   = 'left';
+    }
+  }
+}
+
+// ── Entity rendering ──────────────────────────────────────────────────────────
+
+function drawEntities() {
+  const isNight = dayTime < 420 || dayTime >= 1020;
+  for (const e of entities) {
+    if (!e.alive) continue;
+    if (e.kind === 'wolf' && !isNight) continue;   // wolves only at night
+    if (e.kind === 'fox'  && !isNight && spiritAlpha < 0.1) continue; // fox: night or spirit
+
+    const { sx, sy } = worldToScreen(e.x - 0.5, e.y - 0.5);
+    const cx = sx + TILE_PX / 2;
+    const cy = sy + TILE_PX / 2;
+    const s  = SCALE;
+
+    if (e.kind === 'deer') {
+      const bob = Math.sin(wavePhase * 3 + e.phase) * (e.state === 'flee' ? 1.5 * s : 0.5 * s);
+      // Body
+      ctx.fillStyle = '#8b6040';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + bob, 5 * s, 3.5 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Head
+      ctx.fillStyle = '#a07050';
+      ctx.beginPath();
+      ctx.arc(cx + 4 * s, cy - 2 * s + bob, 2.5 * s, 0, Math.PI * 2);
+      ctx.fill();
+      // Legs
+      ctx.fillStyle = '#6b4828';
+      for (let i = 0; i < 4; i++) {
+        const lx = cx + (i < 2 ? -3 : 3) * s;
+        const ly = cy + 3 * s + Math.sin(wavePhase * 6 + e.phase + i) * (e.state === 'flee' ? 2 * s : 0.5 * s);
+        ctx.fillRect(lx - s * 0.5, ly, s, 3 * s);
+      }
+      // Antlers (simple V)
+      ctx.strokeStyle = '#4a3020';
+      ctx.lineWidth = s * 0.8;
+      ctx.beginPath();
+      ctx.moveTo(cx + 4 * s, cy - 4 * s + bob);
+      ctx.lineTo(cx + 2 * s, cy - 8 * s + bob);
+      ctx.moveTo(cx + 4 * s, cy - 4 * s + bob);
+      ctx.lineTo(cx + 6 * s, cy - 8 * s + bob);
+      ctx.stroke();
+
+    } else if (e.kind === 'bird') {
+      const flap = Math.sin(wavePhase * 8 + e.phase) * 2 * s;
+      ctx.fillStyle = e.state === 'flee' ? '#888890' : '#707888';
+      // Wings
+      ctx.beginPath();
+      ctx.ellipse(cx - 2 * s, cy + flap, 3 * s, s, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + 2 * s, cy - flap, 3 * s, s, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      // Body
+      ctx.fillStyle = '#505868';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 1.5 * s, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (e.kind === 'wolf') {
+      const prowl = Math.sin(wavePhase * 2 + e.phase) * 0.5 * s;
+      // Eerie glow
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 8 * s);
+      grad.addColorStop(0, 'rgba(80,0,120,0.3)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 8 * s, 0, Math.PI * 2);
+      ctx.fill();
+      // Body
+      ctx.fillStyle = '#1e1428';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + prowl, 6 * s, 4 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Head
+      ctx.fillStyle = '#2a1e38';
+      ctx.beginPath();
+      ctx.arc(cx + 5 * s, cy - 2 * s + prowl, 3.5 * s, 0, Math.PI * 2);
+      ctx.fill();
+      // Eyes — red
+      ctx.fillStyle = '#ff2020';
+      ctx.fillRect(cx + 4 * s, cy - 3 * s + prowl, s, s);
+      ctx.fillRect(cx + 6.5 * s, cy - 3 * s + prowl, s, s);
+      // Legs
+      ctx.fillStyle = '#150e20';
+      for (let i = 0; i < 4; i++) {
+        const lx = cx + (i < 2 ? -4 : 2) * s;
+        const lphase = wavePhase * 5 + e.phase + i * 0.7;
+        ctx.fillRect(lx, cy + 3 * s + Math.sin(lphase) * 1.5 * s, s, 3 * s);
+      }
+
+    } else if (e.kind === 'fox') {
+      const glow = Math.sin(wavePhase * 1.8 + e.phase) * 0.5 + 0.5;
+      ctx.globalAlpha = 0.5 + glow * 0.4;
+      // Ethereal glow
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 10 * s);
+      grad.addColorStop(0, `rgba(255,200,80,${0.4 * glow})`);
+      grad.addColorStop(1, 'rgba(255,200,80,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2);
+      ctx.fill();
+      // Body
+      ctx.fillStyle = '#e07820';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 5 * s, 3 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Head
+      ctx.fillStyle = '#f09030';
+      ctx.beginPath();
+      ctx.arc(cx + 4 * s, cy - s, 3 * s, 0, Math.PI * 2);
+      ctx.fill();
+      // Ears
+      ctx.fillStyle = '#c06018';
+      ctx.beginPath();
+      ctx.moveTo(cx + 3 * s, cy - 3 * s);
+      ctx.lineTo(cx + 2 * s, cy - 7 * s);
+      ctx.lineTo(cx + 5 * s, cy - 4 * s);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx + 5 * s, cy - 3 * s);
+      ctx.lineTo(cx + 7 * s, cy - 7 * s);
+      ctx.lineTo(cx + 7 * s, cy - 3 * s);
+      ctx.fill();
+      // Bushy tail
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.ellipse(cx - 6 * s, cy + s, 4 * s, 2 * s, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// ── Spell effects rendering ────────────────────────────────────────────────────
+
+function drawSpellEffects() {
+  for (const sp of activeSpells) {
+    if (sp.kind === 'fire' && sp.ox !== undefined) {
+      const { sx, sy } = worldToScreen(sp.ox!, sp.oy!);
+      const s  = SCALE;
+      const cx = sx, cy = sy;
+      // Orb core
+      const flicker = Math.sin(wavePhase * 10) * 0.5 + 0.5;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 10 * s);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.2, '#ffaa20');
+      grad.addColorStop(0.5, `rgba(255,60,0,${0.6 + flicker * 0.3})`);
+      grad.addColorStop(1, 'rgba(255,30,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Water veil — ring around player
+  if (waterVeilTimer > 0) {
+    const { sx, sy } = worldToScreen(player.x, player.y);
+    const alpha = Math.min(1, waterVeilTimer / 30) * 0.5;
+    const r     = 3 * TILE_PX;
+    const grad  = ctx.createRadialGradient(sx, sy, r * 0.7, sx, sy, r);
+    grad.addColorStop(0, `rgba(60,160,255,0)`);
+    grad.addColorStop(0.7, `rgba(60,160,255,${alpha * 0.3})`);
+    grad.addColorStop(1, `rgba(100,200,255,${alpha})`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Animated ring
+    ctx.strokeStyle = `rgba(100,200,255,${alpha * 1.5})`;
+    ctx.lineWidth   = SCALE;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r + Math.sin(wavePhase * 3) * 4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Wind step — speed trail
+  if (windStepTimer > 0) {
+    const { sx, sy } = worldToScreen(player.x, player.y);
+    const alpha = Math.min(1, windStepTimer / 20) * 0.6;
+    for (let i = 1; i <= 4; i++) {
+      const bx = sx - player.x * 0 + (player.dir === 'left' ? i * 8 : player.dir === 'right' ? -i * 8 : 0);
+      const by = sy + (player.dir === 'up' ? i * 8 : player.dir === 'down' ? -i * 8 : 0);
+      ctx.fillStyle = `rgba(200,255,200,${alpha * (0.4 - i * 0.08)})`;
+      ctx.beginPath();
+      ctx.arc(bx, by, (5 - i) * SCALE, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+// ── Ghost ship ────────────────────────────────────────────────────────────────
+
+function drawGhostShip() {
+  if (atmosphere !== 'fog') return;
+  const { sx, sy } = worldToScreen(ghostShipX, 6);
+  if (sx > canvas.width + 200 || sx < -200) return;
+  const s = SCALE;
+  ctx.globalAlpha = 0.18 + Math.sin(wavePhase * 0.3) * 0.06;
+  ctx.fillStyle   = '#b0c8d0';
+  // Hull
+  ctx.beginPath();
+  ctx.moveTo(sx - 12 * s, sy + 3 * s);
+  ctx.lineTo(sx + 14 * s, sy + 3 * s);
+  ctx.lineTo(sx + 10 * s, sy + 6 * s);
+  ctx.lineTo(sx - 10 * s, sy + 6 * s);
+  ctx.closePath();
+  ctx.fill();
+  // Mast
+  ctx.fillRect(sx - s, sy - 12 * s, s, 15 * s);
+  // Sail
+  ctx.beginPath();
+  ctx.moveTo(sx - s, sy - 12 * s);
+  ctx.lineTo(sx + 9 * s, sy - 5 * s);
+  ctx.lineTo(sx - s, sy + 2 * s);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// ── Whale breach ──────────────────────────────────────────────────────────────
+
+function drawWhale() {
+  if (whaleAnim <= 0) return;
+  const progress = 1 - whaleAnim / 160;   // 0→1 over 160 frames
+  const arc = Math.sin(progress * Math.PI); // 0→1→0
+  const { sx, sy } = worldToScreen(whaleX, whaleY - arc * 3.5);
+  const s = SCALE;
+  ctx.globalAlpha = arc * 0.9;
+  // Body
+  ctx.fillStyle = '#2a4858';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, 14 * s, 5 * s, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  // Tail
+  ctx.beginPath();
+  ctx.moveTo(sx - 12 * s, sy + s);
+  ctx.lineTo(sx - 18 * s, sy - 4 * s);
+  ctx.lineTo(sx - 14 * s, sy - 2 * s);
+  ctx.lineTo(sx - 18 * s, sy + 6 * s);
+  ctx.closePath();
+  ctx.fill();
+  // Splash particles
+  if (arc > 0.6) {
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI + Math.PI * 0.2;
+      const dist  = (arc - 0.6) * 5 * TILE_PX * (0.5 + Math.sin(i * 1.3) * 0.5);
+      ctx.fillStyle = `rgba(160,200,230,${(1 - arc) * 0.7})`;
+      ctx.beginPath();
+      ctx.arc(
+        sx + Math.cos(angle) * dist,
+        sy + Math.sin(angle) * dist * 0.4,
+        (3 - (arc - 0.6) * 4) * s, 0, Math.PI * 2,
+      );
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
 // ── Atmosphere effects ────────────────────────────────────────────────────────
 
 function drawAtmosphere() {
@@ -430,7 +803,9 @@ function drawDiscoveries() {
   if (!discPanelOpen) return;
 
   const layer2Active = save.discoveries.length >= DISCOVERIES.length;
-  const allDiscs     = layer2Active ? [...DISCOVERIES, ...LAYER2_DISCOVERIES] : DISCOVERIES;
+  const allDiscs     = layer2Active
+    ? [...DISCOVERIES, ...LAYER2_DISCOVERIES, ...RUNE_DISCOVERIES]
+    : DISCOVERIES;
   const found        = allDiscs.filter(d => save.discoveries.includes(d.id));
   const W = 300, PAD = 20;
   const headerH = layer2Active ? 68 : 52;
@@ -485,11 +860,73 @@ function drawDiscoveries() {
   ctx.textAlign  = 'left';
 }
 
+function drawEssenceBar() {
+  const BAR_W = 120, BAR_H = 8;
+  const bx = canvas.width / 2 - BAR_W / 2;
+  const by = canvas.height - 22;
+  const pct = save.essence / ESSENCE_MAX;
+
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(bx - 4, by - 4, BAR_W + 8, BAR_H + 8);
+
+  // Fill — color shifts as essence depletes
+  const r = Math.floor(40 + (1 - pct) * 160);
+  const g = Math.floor(100 * pct);
+  const b = Math.floor(180 + 30 * pct);
+  ctx.fillStyle = `rgb(${r},${g},${b})`;
+  ctx.fillRect(bx, by, BAR_W * pct, BAR_H);
+
+  // Label
+  ctx.fillStyle  = 'rgba(200,220,255,0.5)';
+  ctx.font       = '9px "Courier New", monospace';
+  ctx.textAlign  = 'center';
+  ctx.fillText('essence', canvas.width / 2, by - 4);
+  ctx.textAlign  = 'left';
+
+  // Spell icons (unlocked runes, left of essence bar)
+  const runeColors: Record<RuneKind, string> = {
+    fire: '#ff6030', water: '#30aaff', earth: '#60cc40', wind: '#ffff80',
+  };
+  const runeKeys: Array<[RuneKind, string]> = [
+    ['fire', '1'], ['water', '2'], ['earth', '3'], ['wind', '4'],
+  ];
+  runeKeys.forEach(([kind, key], i) => {
+    if (!save.collectedRunes.includes(kind)) return;
+    const ix = bx - 30 - i * 28;
+    const iy = by - 4;
+    const canCast = save.essence >= SPELL_COSTS[kind];
+    ctx.fillStyle = canCast ? runeColors[kind] : 'rgba(100,100,100,0.5)';
+    ctx.fillRect(ix, iy, 20, 16);
+    ctx.fillStyle = '#000';
+    ctx.font      = '8px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(key, ix + 10, iy + 11);
+    ctx.textAlign = 'left';
+  });
+}
+
+function drawSpiritHUD() {
+  if (spiritAlpha < 0.05) return;
+  // Spirit mode indicator top-center
+  ctx.globalAlpha = spiritAlpha;
+  ctx.fillStyle   = 'rgba(30,10,80,0.7)';
+  const label = '✦  SPIRIT REALM  ✦';
+  const tw = label.length * 7.5 + 20;
+  ctx.fillRect(canvas.width / 2 - tw / 2, 10, tw, 22);
+  ctx.fillStyle = '#c090ff';
+  ctx.font      = '11px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, canvas.width / 2, 25);
+  ctx.textAlign  = 'left';
+  ctx.globalAlpha = 1;
+}
+
 function drawHUD() {
   // Discovery count (top left)
   const n          = save.discoveries.length;
   const totalDiscs = n >= DISCOVERIES.length
-    ? DISCOVERIES.length + LAYER2_DISCOVERIES.length
+    ? DISCOVERIES.length + LAYER2_DISCOVERIES.length + RUNE_DISCOVERIES.length
     : DISCOVERIES.length;
   ctx.fillStyle  = 'rgba(0,0,0,0.5)';
   ctx.fillRect(14, 14, 120, 24);
@@ -707,7 +1144,8 @@ function movePlayer(dt: number) {
   if (dx !== 0) player.dir = dx < 0 ? 'left' : 'right';
   if (dy !== 0) player.dir = dy < 0 ? 'up' : 'down';
 
-  const spd   = SPEED * (dt / 16.67);
+  const windMult = windStepTimer > 0 ? 2.5 : 1;
+  const spd   = SPEED * windMult * (dt / 16.67);
   const nx    = player.x + dx * spd;
   const ny    = player.y + dy * spd;
   const foot  = 0.35; // collision box half-width in tiles
@@ -729,6 +1167,352 @@ function movePlayer(dt: number) {
   } else {
     player.frame = 0;
   }
+}
+
+// ── Entity AI ─────────────────────────────────────────────────────────────────
+
+function updateEntities(dt: number) {
+  const isNight   = dayTime < 420 || dayTime >= 1020;
+  const spd       = dt / 16.67;
+  const px = player.x, py = player.y;
+
+  // Fox: lead toward nearest uncollected rune
+  const fox = entities.find(e => e.kind === 'fox');
+  let foxTargetRune = fox ? RUNES.find(r => !save.collectedRunes.includes(r.kind)) : null;
+
+  for (const e of entities) {
+    if (!e.alive) continue;
+
+    // Wolves sleep during day
+    if (e.kind === 'wolf' && !isNight) {
+      e.state = 'idle'; e.vx = 0; e.vy = 0; continue;
+    }
+
+    const dx = px - e.x, dy = py - e.y;
+    const distToPlayer = Math.sqrt(dx * dx + dy * dy);
+
+    e.stateTimer = Math.max(0, e.stateTimer - 1);
+
+    if (e.kind === 'deer') {
+      if (distToPlayer < 4) {
+        e.state = 'flee';
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        e.vx = -(dx / len) * 0.055 * spd;
+        e.vy = -(dy / len) * 0.055 * spd;
+      } else if (e.state === 'flee' && distToPlayer > 7) {
+        e.state  = 'idle';
+        e.stateTimer = 120;
+        e.vx = 0; e.vy = 0;
+      } else if (e.state !== 'flee') {
+        if (e.stateTimer <= 0) {
+          e.stateTimer = 80 + Math.floor(Math.sin(e.phase * 17.3) * 40 + 40);
+          e.state = Math.sin(e.phase + wavePhase * 0.1) > 0 ? 'wander' : 'idle';
+          if (e.state === 'wander') {
+            const angle = wavePhase * 0.7 + e.phase * 3.1;
+            e.vx = Math.cos(angle) * 0.022 * spd;
+            e.vy = Math.sin(angle) * 0.022 * spd;
+          } else {
+            e.vx = 0; e.vy = 0;
+          }
+        }
+      }
+
+    } else if (e.kind === 'bird') {
+      // Flock — all birds in flock share state based on flock leader (first bird)
+      if (distToPlayer < 4 && e.state !== 'flee') {
+        e.state = 'flee';
+        e.stateTimer = 200;
+        const angle = Math.atan2(-dy, -dx) + (Math.random() - 0.5) * 1.2;
+        e.vx = Math.cos(angle) * 0.07 * spd;
+        e.vy = Math.sin(angle) * 0.07 * spd;
+      } else if (e.state === 'flee') {
+        if (e.stateTimer <= 0) {
+          e.state = 'idle'; e.vx *= 0.95; e.vy *= 0.95;
+        }
+      } else {
+        // Gentle drift
+        e.vx = Math.sin(wavePhase * 0.4 + e.phase) * 0.006 * spd;
+        e.vy = Math.cos(wavePhase * 0.3 + e.phase) * 0.006 * spd;
+      }
+
+    } else if (e.kind === 'wolf') {
+      if (e.state !== 'hunt' && distToPlayer < 8) {
+        e.state = 'hunt';
+      } else if (e.state === 'hunt' && distToPlayer > 12) {
+        e.state = 'wander'; e.stateTimer = 100;
+      }
+      if (e.state === 'hunt') {
+        const len = distToPlayer || 1;
+        let speed = 0.04 * spd;
+        // Slowed by water veil
+        if (waterVeilTimer > 0 && distToPlayer < 3) speed = 0;
+        // Knocked back by earth pulse (handled as instant, velocity set there)
+        e.vx = (dx / len) * speed + e.vx * 0.8;
+        e.vy = (dy / len) * speed + e.vy * 0.8;
+      } else {
+        if (e.stateTimer <= 0) {
+          const angle = wavePhase * 0.5 + e.phase * 2.7;
+          e.vx = Math.cos(angle) * 0.018 * spd;
+          e.vy = Math.sin(angle) * 0.018 * spd;
+          e.stateTimer = 120;
+        }
+      }
+
+      // Wolf contact — drain essence
+      if (distToPlayer < 1.2 && waterVeilTimer <= 0 && windStepTimer <= 0) {
+        save.essence = Math.max(0, save.essence - 0.4 * spd);
+        essenceFlash = 8;
+      }
+
+    } else if (e.kind === 'fox') {
+      // Lead toward nearest uncollected rune
+      if (foxTargetRune) {
+        const rdx = foxTargetRune.tx - e.x, rdy = foxTargetRune.ty - e.y;
+        const rdist = Math.sqrt(rdx * rdx + rdy * rdy);
+        if (rdist > 1.5) {
+          const len = rdist || 1;
+          e.vx = (rdx / len) * 0.025 * spd;
+          e.vy = (rdy / len) * 0.025 * spd;
+        } else {
+          e.vx = Math.sin(wavePhase * 0.8 + e.phase) * 0.01 * spd;
+          e.vy = Math.cos(wavePhase * 0.6 + e.phase) * 0.01 * spd;
+        }
+      }
+    }
+
+    // Move (with passability check for deer/fox/wolf — birds fly)
+    if (e.kind === 'bird') {
+      e.x += e.vx; e.y += e.vy;
+    } else {
+      const nx = e.x + e.vx, ny = e.y + e.vy;
+      if (passable(nx, e.y)) e.x = nx; else e.vx *= -0.5;
+      if (passable(e.x, ny)) e.y = ny; else e.vy *= -0.5;
+    }
+    // Keep entities within world bounds (loose)
+    e.x = Math.max(2, Math.min(WORLD_W - 2, e.x));
+    e.y = Math.max(2, Math.min(WORLD_H - 2, e.y));
+  }
+}
+
+// ── Spell logic ────────────────────────────────────────────────────────────────
+
+const SPELL_COSTS: Record<RuneKind, number> = { fire: 20, water: 15, earth: 25, wind: 10 };
+
+function castSpell(kind: RuneKind) {
+  if (!save.collectedRunes.includes(kind)) return;
+  if (save.essence < SPELL_COSTS[kind]) return;
+  if (spellCooldown > 0) return;
+
+  save.essence -= SPELL_COSTS[kind];
+  spellCooldown = 20;
+
+  if (kind === 'fire') {
+    const dirV: Record<string, [number, number]> = {
+      up: [0, -0.18], down: [0, 0.18], left: [-0.18, 0], right: [0.18, 0],
+    };
+    const [ovx, ovy] = dirV[player.dir];
+    activeSpells.push({ kind: 'fire', timer: 55, ox: player.x, oy: player.y, ovx, ovy });
+    playSpellSound('fire');
+  } else if (kind === 'water') {
+    waterVeilTimer = 240; // 4s at 60fps
+    playSpellSound('water');
+  } else if (kind === 'earth') {
+    // Instant knockback to wolves within 5 tiles
+    for (const e of entities) {
+      if (e.kind !== 'wolf' || !e.alive) continue;
+      const dx = e.x - player.x, dy = e.y - player.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 5) {
+        const len = dist || 1;
+        e.vx += (dx / len) * 0.4;
+        e.vy += (dy / len) * 0.4;
+        e.state = 'wander'; e.stateTimer = 120;
+      }
+    }
+    // Screen shake via overlay flash
+    essenceFlash = 0;
+    playSpellSound('earth');
+    // Visual: brief earth ring
+    activeSpells.push({ kind: 'earth', timer: 30 });
+  } else if (kind === 'wind') {
+    windStepTimer = 180; // 3s
+    playSpellSound('wind');
+  }
+}
+
+function updateSpells(dt: number) {
+  const spd = dt / 16.67;
+  if (spellCooldown > 0) spellCooldown--;
+  if (waterVeilTimer > 0) waterVeilTimer--;
+  if (windStepTimer  > 0) windStepTimer--;
+
+  // Update fire orb
+  for (let i = activeSpells.length - 1; i >= 0; i--) {
+    const sp = activeSpells[i];
+    sp.timer--;
+    if (sp.kind === 'fire' && sp.ox !== undefined) {
+      sp.ox! += sp.ovx! * spd * 60 / 60;
+      sp.oy! += sp.ovy! * spd * 60 / 60;
+      // Hit wolf
+      for (const e of entities) {
+        if (e.kind !== 'wolf' || !e.alive) continue;
+        const dx = sp.ox! - e.x, dy = sp.oy! - e.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 1.0) {
+          e.alive = false;
+          // Respawn wolf after 30s
+          setTimeout(() => { e.alive = true; e.x = 8; e.y = 18; e.state = 'idle'; }, 30000);
+          sp.timer = 0;
+          playDiscoveryChime();
+        }
+      }
+      // Hit wall
+      if (!passable(sp.ox!, sp.oy!)) sp.timer = 0;
+    }
+    if (sp.timer <= 0) { activeSpells.splice(i, 1); }
+  }
+
+  // Essence regen — standing still on grass/sand/path
+  const tile = tileAt(player.x, player.y);
+  const onRest = tile === T.GRASS || tile === T.GRASS_LIGHT || tile === T.SAND || tile === T.PATH;
+  if (onRest && !player.moving) {
+    save.essence = Math.min(ESSENCE_MAX, save.essence + 0.08 * spd);
+  }
+  // Wind step — extra speed handled in movePlayer
+  if (essenceFlash > 0) essenceFlash--;
+}
+
+// ── Rune collection ────────────────────────────────────────────────────────────
+
+function collectNearbyRune() {
+  if (!spiritMode) return;
+  for (const rune of RUNES) {
+    if (save.collectedRunes.includes(rune.kind)) continue;
+    const dx = player.x - rune.tx, dy = player.y - rune.ty;
+    if (Math.sqrt(dx * dx + dy * dy) < 1.8) {
+      save.collectedRunes.push(rune.kind);
+      if (!save.discoveries.includes(rune.discoveryId)) {
+        save.discoveries.push(rune.discoveryId);
+        playDiscoveryChime();
+      }
+      openDialog({
+        id: `rune_collect_${rune.kind}`,
+        tx: rune.tx, ty: rune.ty, range: 2,
+        prompt: '',
+        lines: [rune.runeDesc, rune.spellDesc],
+      });
+      return true;
+    }
+  }
+  return false;
+}
+
+// ── Weather events ─────────────────────────────────────────────────────────────
+
+function updateWeather(dt: number) {
+  const spd = dt / 16.67;
+
+  // Ghost ship drifts slowly offshore (fog days)
+  if (atmosphere === 'fog') {
+    ghostShipX += 0.004 * spd;
+    if (ghostShipX > WORLD_W + 10) ghostShipX = -12;
+  }
+
+  // Whale — trigger once, random time 3–8 min in
+  if (!whaleDone && whaleTimer <= 0) {
+    whaleTimer = Math.floor(3 * 3600 + Math.sin(save.playTime) * 3 * 3600);
+  }
+  if (!whaleDone && whaleTimer > 0) {
+    whaleTimer -= spd;
+    if (whaleTimer <= 0 && !whaleDone) {
+      whaleDone = true;
+      // Pick a deep-water spot offshore (south of island)
+      whaleX = 20 + Math.floor(Math.abs(Math.sin(save.playTime * 7)) * 10);
+      whaleY = WORLD_H + 3;
+      whaleAnim = 160;
+    }
+  }
+  if (whaleAnim > 0) { whaleAnim -= spd; if (whaleAnim < 0) whaleAnim = 0; }
+
+  // Lightning — check every ~5 min (18000 frames @ 60fps)
+  if (lightningFlash > 0) { lightningFlash -= spd; return; }
+  if (lightningTimer <= 0) {
+    lightningTimer = 10000 + Math.floor(Math.abs(Math.sin(wavePhase * 0.7)) * 8000);
+  }
+  lightningTimer -= spd;
+  if (lightningTimer <= 0) {
+    lightningFlash = 8;
+    thunderScheduled = true;
+    if (audioCtx) {
+      setTimeout(() => {
+        if (!audioCtx || !thunderScheduled) return;
+        thunderScheduled = false;
+        playThunder();
+      }, 800 + Math.random() * 600);
+    }
+  }
+}
+
+// ── Audio helpers ─────────────────────────────────────────────────────────────
+
+function playSpellSound(kind: RuneKind) {
+  if (!audioCtx) return;
+  if (kind === 'fire') {
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const bpf = audioCtx.createBiquadFilter();
+    bpf.type = 'bandpass'; bpf.frequency.value = 800;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.15;
+    src.connect(bpf); bpf.connect(gain); gain.connect(audioCtx.destination);
+    src.start();
+  } else if (kind === 'water') {
+    const freqs = [440, 554, 659];
+    freqs.forEach((f, i) => {
+      const osc = audioCtx!.createOscillator();
+      const g   = audioCtx!.createGain();
+      osc.type = 'sine'; osc.frequency.value = f;
+      g.gain.setValueAtTime(0.08, audioCtx!.currentTime + i * 0.08);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx!.currentTime + i * 0.08 + 0.8);
+      osc.connect(g); g.connect(audioCtx!.destination);
+      osc.start(audioCtx!.currentTime + i * 0.08);
+      osc.stop(audioCtx!.currentTime + i * 0.08 + 0.9);
+    });
+  } else if (kind === 'earth') {
+    const osc = audioCtx.createOscillator();
+    const g   = audioCtx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(80, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.4);
+    g.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+  } else if (kind === 'wind') {
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.4, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1);
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const bpf = audioCtx.createBiquadFilter();
+    bpf.type = 'highpass'; bpf.frequency.value = 2000;
+    const g = audioCtx.createGain(); g.gain.value = 0.1;
+    src.connect(bpf); bpf.connect(g); g.connect(audioCtx.destination);
+    src.start();
+  }
+}
+
+function playThunder() {
+  if (!audioCtx) return;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.5, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.4));
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const lpf = audioCtx.createBiquadFilter();
+  lpf.type = 'lowpass'; lpf.frequency.value = 200;
+  const g = audioCtx.createGain(); g.gain.value = 0.8;
+  src.connect(lpf); lpf.connect(g); g.connect(audioCtx.destination);
+  src.start();
 }
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
@@ -755,7 +1539,20 @@ function loop(now: number) {
 
   wavePhase += 0.03;
 
-  // Move player
+  // Spirit mode toggle (F key)
+  if (fJustPressed && !dialogActive) {
+    fJustPressed = false;
+    spiritMode = !spiritMode;
+  } else {
+    fJustPressed = false;
+  }
+  // Animate spirit overlay
+  const spiritTarget = spiritMode ? 1 : 0;
+  spiritAlpha += (spiritTarget - spiritAlpha) * 0.07;
+  if (spiritAlpha < 0.01) spiritAlpha = 0;
+  if (spiritAlpha > 0.99) spiritAlpha = 1;
+
+  // Move player (wind step doubles speed)
   movePlayer(dt);
 
   // Zone detection
@@ -789,11 +1586,26 @@ function loop(now: number) {
     if (dialogActive) {
       if (!dialogJustOpened) advanceDialog();
       dialogJustOpened = false;
-    } else if (nearbyInteractable && !discPanelOpen) {
+    } else if (!discPanelOpen) {
       initAudio();
-      openDialog(nearbyInteractable);
+      // Rune collection takes priority in spirit mode
+      const runeCollected = collectNearbyRune();
+      if (!runeCollected && nearbyInteractable) {
+        openDialog(nearbyInteractable);
+      }
     }
   }
+
+  // Spell key input
+  if (spellKeyPress) {
+    castSpell(spellKeyPress);
+    spellKeyPress = null;
+  }
+
+  // Entity + spell + weather updates
+  updateEntities(dt);
+  updateSpells(dt);
+  updateWeather(dt);
 
   // Save timer
   if (saveStatusTimer > 0) saveStatusTimer--;
@@ -809,8 +1621,14 @@ function loop(now: number) {
   drawStars();
   drawWorld();
   drawFireflies();
+  drawGhostShip();
+  drawWhale();
   drawAtmosphere();
+  drawEntities();
   drawInteractableSprites();
+  drawSpiritOverlay();
+  drawRunes();
+  drawSpellEffects();
   drawPlayer();
 
   // Day/night overlay
@@ -822,11 +1640,45 @@ function loop(now: number) {
     ctx.globalAlpha = 1;
   }
 
+  // Lightning flash
+  if (lightningFlash > 0) {
+    ctx.fillStyle   = `rgba(255,255,255,${(lightningFlash / 8) * 0.7})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Essence drain vignette (red when wolf near)
+  if (essenceFlash > 0) {
+    ctx.fillStyle   = `rgba(180,0,0,${essenceFlash / 8 * 0.4})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Wolf proximity vignette
+  const isNightRender = dayTime < 420 || dayTime >= 1020;
+  if (isNightRender) {
+    const nearWolf = entities.some(e => e.kind === 'wolf' && e.alive && (() => {
+      const dx = player.x - e.x, dy = player.y - e.y;
+      return Math.sqrt(dx * dx + dy * dy) < 5;
+    })());
+    if (nearWolf) {
+      const grad = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.25,
+        canvas.width / 2, canvas.height / 2, canvas.width * 0.6,
+      );
+      const pulse = Math.sin(wavePhase * 3) * 0.15 + 0.25;
+      grad.addColorStop(0, 'rgba(120,0,0,0)');
+      grad.addColorStop(1, `rgba(120,0,0,${pulse})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
   drawZoneBanner();
   drawInteractPrompt();
   drawDialog();
   drawDiscoveries();
   drawHUD();
+  drawSpiritHUD();
+  drawEssenceBar();
 }
 
 // ── Save trigger ──────────────────────────────────────────────────────────────
@@ -856,11 +1708,19 @@ export function startGame(
   saveCallback: (s: SaveState, sha: string | null) => Promise<string>,
 ) {
   save       = initialSave;
+  // Migrate older saves missing new fields
+  if (save.collectedRunes === undefined) save.collectedRunes = [];
+  if (save.essence        === undefined) save.essence        = ESSENCE_MAX;
   saveSha    = sha;
   onSave     = saveCallback;
   world      = buildWorld();
   dailyNotes = getDailyNotes();
   atmosphere = getDailyAtmosphere();
+  entities   = spawnEntities();
+  // Reset whale for this session
+  whaleDone  = false;
+  whaleTimer = 0;
+  ghostShipX = -8.0;
 
   // Show atmosphere as an opening banner
   const atmMsg: Record<Atmosphere, string> = {
@@ -894,6 +1754,11 @@ export function startGame(
   window.addEventListener('keydown', e => {
     keys[e.key] = true;
     if (e.key === 'e' || e.key === 'E') eJustPressed = true;
+    if (e.key === 'f' || e.key === 'F') fJustPressed = true;
+    if (e.key === '1') spellKeyPress = 'fire';
+    if (e.key === '2') spellKeyPress = 'water';
+    if (e.key === '3') spellKeyPress = 'earth';
+    if (e.key === '4') spellKeyPress = 'wind';
     if (e.key === 'Tab') { e.preventDefault(); discPanelOpen = !discPanelOpen; dialogActive = false; }
     if (e.key === 'Escape') { dialogActive = false; discPanelOpen = false; }
   });

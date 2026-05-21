@@ -1,5 +1,5 @@
 import { T, WORLD_W, WORLD_H } from './types';
-import type { TileDef, Interactable, Discovery } from './types';
+import type { TileDef, Interactable, Discovery, RuneKind, Entity } from './types';
 
 // ── Tile definitions ─────────────────────────────────────────────────────────
 
@@ -485,6 +485,123 @@ export const LAYER2_INTERACTABLES: Interactable[] = [
     discoveryId: 'l2_summit_cairn',
   },
 ];
+
+// ── Spirit runes ──────────────────────────────────────────────────────────────
+// Positions only visible/collectible in spirit mode
+
+export interface RuneDef {
+  kind: RuneKind;
+  tx: number;
+  ty: number;
+  discoveryId: string;
+  spellName: string;
+  spellDesc: string;
+  runeDesc: string;
+}
+
+export const RUNES: RuneDef[] = [
+  {
+    kind: 'fire',
+    tx: 31, ty: 15,
+    discoveryId: 'rune_fire',
+    spellName: 'Fire Orb',
+    spellDesc: 'A projectile of concentrated flame. Press [1] to cast.',
+    runeDesc:  'The Fire Rune pulses with trapped heat. You feel it enter you like a held breath finally released.',
+  },
+  {
+    kind: 'water',
+    tx: 18, ty: 34,
+    discoveryId: 'rune_water',
+    spellName: 'Water Veil',
+    spellDesc:  'A ward of still water. Wolves cannot enter its radius. Press [2] to cast.',
+    runeDesc:   'The Water Rune hums at a frequency just below hearing. Something in the tide recognises it.',
+  },
+  {
+    kind: 'earth',
+    tx: 24, ty: 10,
+    discoveryId: 'rune_earth',
+    spellName: 'Earth Pulse',
+    spellDesc:  'A shockwave through the ground. Knocks nearby wolves away. Press [3] to cast.',
+    runeDesc:   'The Earth Rune is heavier than it looks. You feel the island shift slightly underfoot.',
+  },
+  {
+    kind: 'wind',
+    tx: 13, ty: 12,
+    discoveryId: 'rune_wind',
+    spellName: 'Wind Step',
+    spellDesc:  'A burst of speed. Wolves cannot touch you while it lasts. Press [4] to cast.',
+    runeDesc:   'The Wind Rune dissolves into you the moment you touch it. You feel lighter. The island exhales.',
+  },
+];
+
+export const RUNE_DISCOVERIES: Discovery[] = [
+  { id: 'rune_fire',  title: 'The Fire Rune',  desc: 'Trapped heat, waiting. You gave it somewhere to go.',          symbol: '🜂' },
+  { id: 'rune_water', title: 'The Water Rune', desc: 'The tide knew it. You know it now too.',                        symbol: '🜄' },
+  { id: 'rune_earth', title: 'The Earth Rune', desc: 'The island shifted when you took it. You noticed.',             symbol: '🜃' },
+  { id: 'rune_wind',  title: 'The Wind Rune',  desc: 'It dissolved into you. You are a little less heavy now.',       symbol: '🜁' },
+];
+
+// ── Entity spawns ─────────────────────────────────────────────────────────────
+
+export function spawnEntities(): Entity[] {
+  const entities: Entity[] = [];
+  let id = 0;
+
+  // 5 deer on grass tiles, central island
+  const deerSpots = [
+    [26, 22], [22, 18], [28, 19], [20, 24], [30, 25],
+  ];
+  for (const [x, y] of deerSpots) {
+    entities.push({
+      id: `deer_${id++}`, kind: 'deer',
+      x, y, vx: 0, vy: 0,
+      phase: id * 1.37,
+      state: 'idle', stateTimer: Math.floor(id * 47 % 180),
+      alive: true,
+    });
+  }
+
+  // 2 wolf packs near cave
+  const wolfSpots = [[8, 17], [6, 19]];
+  for (const [x, y] of wolfSpots) {
+    entities.push({
+      id: `wolf_${id++}`, kind: 'wolf',
+      x, y, vx: 0, vy: 0,
+      phase: id * 0.91,
+      state: 'idle', stateTimer: 0,
+      alive: true,
+    });
+  }
+
+  // Spirit fox — near forest grove, only visible at night/spirit mode
+  entities.push({
+    id: 'fox_0', kind: 'fox',
+    x: 14, y: 13, vx: 0, vy: 0,
+    phase: 0.5,
+    state: 'wander', stateTimer: 60,
+    alive: true,
+  });
+
+  // Bird flocks (3 flocks, each is 5 birds)
+  const flockCenters = [[16, 14], [11, 10], [20, 12]];
+  for (let f = 0; f < 3; f++) {
+    const [cx, cy] = flockCenters[f];
+    for (let b = 0; b < 5; b++) {
+      entities.push({
+        id: `bird_${f}_${b}`, kind: 'bird',
+        x: cx + (Math.sin(b * 1.2) * 1.5),
+        y: cy + (Math.cos(b * 0.9) * 1.2),
+        vx: 0, vy: 0,
+        phase: b * 0.63 + f * 2.1,
+        state: 'idle', stateTimer: f * 30 + b * 11,
+        alive: true,
+        flock: f,
+      });
+    }
+  }
+
+  return entities;
+}
 
 export const LAYER2_DISCOVERIES: Discovery[] = [
   { id: 'l2_tide_pool',    title: 'The tide pool',         desc: 'A brass button, an orange peel. You left them.',                  symbol: '○' },
