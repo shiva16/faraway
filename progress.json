@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "px": 18.539085842831525,
-  "py": 25.221457348532713,
-  "dir": "left",
+  "px": 21.808732933412976,
+  "py": 18.473870545894705,
+  "dir": "up",
   "discoveries": [
     "old_fire",
     "hilltop_view",
@@ -26,10 +26,10 @@
     "dep_w6": 1779365757440,
     "dep_w3": 1779365759555,
     "dep_w2": 1779365769207,
-    "dep_c2": 1779365887918,
-    "dep_c1": 1779365889217,
-    "dep_c3": 1779365879644,
-    "dep_c0": 1779365890937,
+    "dep_c2": 1779366011355,
+    "dep_c1": 1779366012798,
+    "dep_c3": 1779366004108,
+    "dep_c0": 1779366015644,
     "dep_w7": 1779365645729,
     "evt_calm_seas": true,
     "dep_s4": 1779352454639,
@@ -40,17 +40,18 @@
     "evt_wolf_pack": true,
     "dep_s2": 1779352453380,
     "used_npc_q_ren": true,
-    "evt_strange_coins": true
+    "evt_strange_coins": true,
+    "evt_wolves_food": true
   },
-  "playTime": 3841.508700000619,
-  "lastSaved": "2026-05-21T12:17:05.492Z",
+  "playTime": 3961.525400000703,
+  "lastSaved": "2026-05-21T12:19:05.507Z",
   "collectedRunes": [],
   "essence": 100,
   "resources": {
     "wood": 76,
     "stone": 2,
     "food": 0,
-    "coin": 43
+    "coin": 57
   },
   "buildings": [
     {
@@ -65,21 +66,21 @@
   "era": 2,
   "shipParts": [],
   "hp": 100,
-  "hunger": 10.035704999983272,
-  "sanity": 100,
+  "hunger": 63.21418999997931,
+  "sanity": 55.07870000000154,
   "researched": [
     "archery"
   ],
   "inventory": [],
   "equippedItem": null,
-  "season": "winter",
-  "seasonTimer": 76.40459999999693,
+  "season": "spring",
+  "seasonTimer": 78.77069999999749,
   "explored": [],
-  "respawnX": 24.2930434313132,
-  "respawnY": 19.578661607680726,
+  "respawnX": 24.411466466706983,
+  "respawnY": 19.808095740855027,
   "enemyCampHp": 400,
-  "raidLevel": 5,
-  "dayCount": 11,
+  "raidLevel": 6,
+  "dayCount": 12,
   "plantedTiles": {},
   "threatCamps": [
     {
@@ -93,6 +94,7 @@
     }
   ],
   "biodiversityLog": [
+    0,
     0,
     0,
     0,
