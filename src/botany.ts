@@ -48,6 +48,10 @@ export interface SpeciesDef {
   spreadRadius: number;         // tiles; mature plant can colonise nearby tiles
   cost: Resources;              // to plant (seeds counted as 'food')
   spriteTint: string;           // CSS colour for pixel sprite
+  // Pairwise ecological interactions (A-matrix row for this species).
+  // Key = other speciesId. Value = effect of that species on THIS species' growth rate.
+  // Positive = facilitation / mutualism. Negative = competition / suppression.
+  interactions?: Partial<Record<string, number>>;
   // Education
   iucnStatus: IUCNStatus;
   threatStatus: string;         // human-readable
@@ -82,6 +86,10 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Least Concern — but habitat loss threatens pollinators',
     ecologicalFact: 'A single Banyan can support over 500 animal species. The largest known Banyan covers 3.5 acres — it is a forest in one tree.',
+    interactions: {
+      leucaena: 0.003,       // N-fixer enriches soil the banyan roots into
+      vanilla_orchid: 0.001, // orchid bee network boosts fig pollination
+    },
     gameEffect: 'Keystone: all species within 3 tiles gain ×1.8 biodiversity score. Attracts bird/bat entities.',
     flavorText: '"Its roots descend from the sky, its canopy is a city, its presence is ancient."',
   },
@@ -106,6 +114,10 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Sacred to Maya peoples; threatened by palm oil conversion',
     ecologicalFact: 'Kapok is one of the few trees pollinated primarily by bats. Its seeds travel up to 30 km on silken fibres — earning it the name "the flying forest."',
+    interactions: {
+      leucaena: 0.002,  // N-fixer boosts kapok establishment
+      banyan: -0.001,   // canopy competition for same emergent layer
+    },
     gameEffect: 'Emergent: creates a third canopy layer, enabling shade-dependent rare species. Night pollinators +50%.',
     flavorText: '"The Maya called it the axis mundi — the tree that holds up the sky."',
   },
@@ -130,6 +142,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Deeply threatened by fig wasp population collapse due to pesticides',
     ecologicalFact: 'The fig tree and its specific wasp have co-evolved for 80 million years. If either goes extinct, the other follows within a generation. Figs are the single most important food for tropical animals.',
+    interactions: {
+      leucaena: 0.003,   // N-fixer accelerates fig establishment
+      wild_fig: 0.003,   // shared fig-wasp pollinators — mutualism
+      banyan: 0.001,     // fig guild synergy
+    },
     gameEffect: 'Maximum keystone score (×2.0). Attracts elephant entities. Enables fig-wasp ecological chain.',
     flavorText: '"Without the fig, the forest collapses. Without the wasp, the fig is silent."',
   },
@@ -154,6 +171,10 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'OLD-GROWTH TEAK CRITICALLY THREATENED — primary target of illegal logging in Myanmar, Thailand, Laos',
     ecologicalFact: 'Myanmar once held 80% of the world\'s old-growth teak. Industrial logging has reduced this by 90% since 1960. A 300-year teak tree supports an ecosystem that takes centuries to rebuild.',
+    interactions: {
+      leucaena: 0.003,  // teak benefits strongly from N-fixer pioneer
+      banyan: -0.001,   // canopy competition
+    },
     gameEffect: 'Grows slowly but produces Wood resource passively. Symbol: old-growth teak = primary logging target.',
     flavorText: '"The loggers came for the teak first. They always come for the strongest ones first."',
   },
@@ -178,6 +199,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'NT',
     threatStatus: 'Near Threatened — wild population nearly eliminated by over-collection',
     ecologicalFact: 'Wild vanilla can only be pollinated by the native Melipona bee of Mexico. All vanilla cultivation elsewhere requires hand-pollination with a toothpick — a process discovered by a 12-year-old enslaved boy, Edmond Albius, in 1841.',
+    interactions: {
+      banyan: 0.005,    // must climb a host — banyan is ideal
+      kapok: 0.003,     // alternative tall host
+      wild_fig: 0.003,  // fig trees share bee pollinators
+    },
     gameEffect: 'Grows on adjacent canopy trees. Attracts rare bee entities. Produces Coin (as a luxury crop).',
     flavorText: '"The most widely used flavour on Earth grows in silence, climbing the trees we have forgotten."',
   },
@@ -204,6 +230,10 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'EN',
     threatStatus: 'ENDANGERED — ancient baobabs dying en masse since 2005. Climate change suspected.',
     ecologicalFact: 'Nine of the world\'s 13 largest known baobabs — some over 2,000 years old — have collapsed and died since 2005. Scientists call it "a phenomenon without precedent." They store up to 100,000 litres of water in their trunks.',
+    interactions: {
+      acacia: 0.003,       // savanna guild: acacia fixes N, baobab benefits
+      sycamore_fig: 0.001, // African savanna keystone synergy
+    },
     gameEffect: 'Water source: reduces hunger drain for nearby units. Supports elephant faction. Keystone ×1.9.',
     flavorText: '"The upside-down tree. Ancient as the elephants. Dying in our lifetimes."',
   },
@@ -228,6 +258,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Threatened in Sudan by desertification and charcoal demand',
     ecologicalFact: 'Acacia thorns evolved in direct response to giraffe browsing. When a giraffe eats from one side, the tree releases tannins AND releases chemical signals (ethylene gas) that warn neighbouring acacias to also produce tannins.',
+    interactions: {
+      baobab: 0.001,        // savanna mutualism — acacia shelters under baobab
+      big_bluestem: -0.002, // grass-shrub competition for savanna ground
+      leucaena: 0.001,      // N-fixer guild synergy
+    },
     gameEffect: 'Nitrogen fixer: adjacent plants get +50% growth speed. Pioneer: can be planted on degraded ground.',
     flavorText: '"It speaks to its neighbours in chemistry. We are only beginning to understand its language."',
   },
@@ -254,6 +289,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Acute oak decline threatening UK forests; Processionary moth outbreak',
     ecologicalFact: 'A single mature English Oak supports more species of wildlife than any other native British tree — over 500 invertebrate species, 230 species of bird, mammal, and fungi. It can live 1,000 years. Britain has lost 50% of its ancient oaks since 1900.',
+    interactions: {
+      silver_birch: 0.004, // birch pioneer prepares soil and light for oak
+      alder: 0.002,        // alder N-fixation enriches riparian oak habitat
+      scots_pine: 0.001,   // mixed temperate woodland
+    },
     gameEffect: 'Keystone ×2.0 in temperate zones. Jay entities spread acorns: auto-plants oaks in adjacent tiles over time.',
     flavorText: '"We have known and loved and lived under English Oaks for ten thousand years. We are still learning what they support."',
   },
@@ -278,6 +318,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Vulnerable to birch dieback disease, spreading northward with climate change',
     ecologicalFact: 'Birch is a nurse tree — it creates the conditions (shade, moisture, mycorrhizal networks) that allow oak, beech and other climax trees to establish. Without birch pioneers, ancient forests cannot regenerate. It sacrifices its own future for the forest\'s.',
+    interactions: {
+      english_oak: 0.001,  // oak creates deeper shade that helps mature birch understory
+      scots_pine: 0.002,   // Caledonian mixed-woodland guild
+      alder: 0.001,        // riparian complement
+    },
     gameEffect: 'Pioneer: can be planted on bare degraded soil. Establishes mycorrhizal network for subsequent species.',
     flavorText: '"The birch does not live to see the forest it makes possible. But the forest remembers."',
   },
@@ -302,6 +347,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Threatened by Phytophthora alni (water mould), spreading via waterways',
     ecologicalFact: 'Alder roots host Frankia bacteria that fix atmospheric nitrogen, enriching the soil. Ancient riverbeds under European cities — including Venice and Amsterdam — are held up by alder pile foundations that have not rotted in 1,000 years because alder wood hardens in water.',
+    interactions: {
+      common_reed: 0.002,  // riparian guild — reed and alder share wetland margins
+      water_lily: 0.001,   // aquatic-to-riparian ecological bridge
+      silver_birch: 0.001, // temperate woodland co-occurrence
+    },
     gameEffect: 'Nitrogen fixer near water tiles. Stabilises shoreline (prevents coastal erosion). Otter habitat.',
     flavorText: '"Venice stands on alder bones. The city of water, built by the tree of water."',
   },
@@ -326,6 +376,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Scotland\'s Caledonian Forest reduced to 1% of original extent',
     ecologicalFact: 'The Caledonian Forest once covered 1.5 million hectares of Scotland. Today, less than 1% survives — fragmented patches too small for wolves or lynx to live in. Each fragment is an island of isolation in an ocean of sheepwalk.',
+    interactions: {
+      silver_birch: 0.002,   // birch pioneer opens canopy for pine establishment
+      siberian_larch: 0.003, // boreal conifer guild — larch and pine share mycorrhizae
+      english_oak: 0.001,    // temperate-boreal overlap
+    },
     gameEffect: 'Boreal keystone: enables red squirrel and crossbill entities. Mycorrhizal network ×2 in cold biome.',
     flavorText: '"Scotland\'s ancient pines have survived 10,000 years. They are not surviving us."',
   },
@@ -352,6 +407,10 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'VU',
     threatStatus: 'VULNERABLE — 35% of global mangroves lost since 1980 to shrimp farming and coastal development',
     ecologicalFact: 'Mangroves store up to 10× more carbon per hectare than tropical rainforests. They protect coastlines from tsunamis — villages sheltered by mangroves in the 2004 Indian Ocean tsunami had dramatically lower death tolls. We are cutting them down to grow shrimp.',
+    interactions: {
+      alder_seaside: 0.002, // coastal stabiliser guild — she-oak and mangrove bind shores together
+      vetiver: 0.002,       // vetiver roots + mangrove prop-roots = maximum erosion control
+    },
     gameEffect: 'Coastal protection: reduces storm damage to adjacent buildings. Carbon credits +2/season. Fish node yield +50% nearby.',
     flavorText: '"The sea-forest stands between us and the ocean\'s fury. We cut it for prawn farms."',
   },
@@ -376,6 +435,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Wetland drainage for agriculture has eliminated 87% of global wetlands since 1700',
     ecologicalFact: '87% of the world\'s wetlands have been destroyed since 1700 — a rate three times faster than forest loss. Wetlands store twice as much carbon per hectare as forests. The UK alone drained 90% of its fens — releasing millennia of stored carbon in decades.',
+    interactions: {
+      alder: 0.003,      // riparian N-fixer boosts reed productivity
+      water_lily: 0.003, // aquatic guild mutualism — open water + reed margins
+      red_mangrove: 0.001,
+    },
     gameEffect: 'Fast-growing. Water filtration: reduces disease events. Enables bittern/marsh harrier entities.',
     flavorText: '"The fen burned for three days when they drained it in 1840. The peat had stored that carbon since before the Romans came."',
   },
@@ -402,6 +466,10 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: '96% of North American tallgrass prairie destroyed — most endangered ecosystem in the world',
     ecologicalFact: 'North American tallgrass prairie was the most diverse terrestrial ecosystem on Earth. In 200 years, industrial agriculture destroyed 96% of it. Below-ground, it held deep root systems that had sequestered carbon for 12,000 years. Now it is corn and soy.',
+    interactions: {
+      vetiver: 0.002,   // both deep-rooted soil stabilisers — complementary
+      acacia: -0.001,   // grass-shrub competition at savanna-grassland boundary
+    },
     gameEffect: 'Pioneer on grassland tiles. Bison entities arrive when 10+ tiles are planted. Monarch butterfly migration path.',
     flavorText: '"The prairie had roots 3 metres deep. The roots are still there, under the corn, waiting."',
   },
@@ -428,6 +496,10 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Critically threatened by permafrost thaw — entire taiga at risk of conversion to bog',
     ecologicalFact: 'The Siberian taiga covers 7 million km² — the largest forest on Earth. As permafrost thaws, the trees lose their footing and topple in "drunken forests." The thaw releases methane stored for 40,000 years, which then accelerates the thaw. An irreversible loop.',
+    interactions: {
+      scots_pine: 0.003,   // boreal conifer guild — larch and pine share ectomycorrhizal networks
+      silver_birch: 0.002, // birch-larch pioneer succession in taiga
+    },
     gameEffect: 'Grows on cold winter tiles. Permafrost stability bonus: slows winter food depletion.',
     flavorText: '"The drunken trees of Siberia lean and fall. The ground they stood on is turning to mud."',
   },
@@ -454,6 +526,9 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Can become invasive — must be managed. Also used for reforestation of degraded land.',
     ecologicalFact: 'Leucaena can fix 500+ kg of atmospheric nitrogen per hectare per year — more than almost any other plant. It is the first-responder of degraded land restoration: plant it, and the soil rebuilds itself within 3–5 years.',
+    interactions: {
+      moringa: 0.001,  // co-pioneer of degraded tropical land
+    },
     gameEffect: 'Fast pioneer: boosts all adjacent plant growth rates by +75%. Can plant on dead/barren tiles.',
     flavorText: '"It comes first to the wound in the earth, and makes the soil ready for those who follow."',
   },
@@ -478,6 +553,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Native ranges threatened by coastal development; used in dune stabilisation globally',
     ecologicalFact: 'Casuarina roots fix nitrogen and can stabilise sand dunes within 2 years of planting. It was instrumental in stopping the advance of the Sahara in parts of North Africa. Its roots go 30 metres deep to find water.',
+    interactions: {
+      vetiver: 0.003,      // coastal erosion control guild: roots 3–4m + she-oak = full coastal armour
+      red_mangrove: 0.002, // coastal stabiliser triad
+      common_reed: 0.001,
+    },
     gameEffect: 'Coastal nitrogen fixer: stabilises sandy tiles, prevents beach erosion. Can plant on shore tiles.',
     flavorText: '"It holds the sand still. Without it, the shore walks inland."',
   },
@@ -504,6 +584,10 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Not threatened — one of the most useful trees on Earth, widely cultivated',
     ecologicalFact: 'Every part of Moringa is edible or medicinal. Its seeds can purify water — crushing one Moringa seed and mixing it into a litre of muddy water removes 90-99% of bacteria. In regions without clean water access, this tree is a lifeline.',
+    interactions: {
+      leucaena: 0.002, // both fast-growing pioneer trees, N-fixer enriches soil for moringa
+      acacia: 0.001,   // savanna companion — moringa and acacia share dryland strategy
+    },
     gameEffect: 'Medicinal: reduces HP drain from disease events. Water purification: reduces spoilage events.',
     flavorText: '"The tree of life, they call it. Not poetically — literally. People survive because of this tree."',
   },
@@ -528,6 +612,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Sacred status protects many specimens — cultural reverence as ecological protection',
     ecologicalFact: 'The Buddha achieved enlightenment under a Ficus religiosa. Because of this, millions of these trees across South and Southeast Asia have been protected for 2,500 years by religious reverence — making cultural respect for trees one of the oldest conservation strategies.',
+    interactions: {
+      banyan: 0.002,       // Ficus guild — shared wasp pollinators across fig species
+      sycamore_fig: 0.002, // fig-wasp co-pollination network
+      vanilla_orchid: 0.004, // orchid-bee link completes the tropical pollinator web
+    },
     gameEffect: 'Sacred aura: +10 sanity to nearby player. Keystone ×1.7. Enables primate entity interactions.',
     flavorText: '"The oldest conservation policy in human history: call the tree sacred. It has worked for 2,500 years."',
   },
@@ -551,6 +640,11 @@ export const SPECIES: SpeciesDef[] = [
     spriteTint: '#68b840',
     iucnStatus: 'LC',
     threatStatus: 'Invasive in some islands (Hawaii, Pacific) — must be carefully managed',
+    interactions: {
+      leucaena: 0.002,  // N-fixer pioneer improves guava fruit production
+      wild_fig: -0.001, // mild competition — both pioneer fruit trees for same frugivores
+      banana: -0.001,   // competition in understory pioneer niche
+    },
     gameEffect: 'Produces Food passively. Fruit attracts bird entities which spread other seeds.',
     ecologicalFact: 'Guava contains 4× more vitamin C per gram than oranges. In forests, guava fruit is a critical fallback food source for animals when primary food sources fail — an ecological safety net.',
     flavorText: '"In lean seasons, the guava gives what the forest cannot."',
@@ -576,6 +670,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'VU',
     threatStatus: 'VULNERABLE — commercial banana monoculture (Cavendish) is one fruit variety facing extinction from Panama Disease TR4 fungus',
     ecologicalFact: 'Every commercial banana sold globally is a clone of a single variety: the Cavendish. A fungus (TR4) is currently destroying Cavendish plantations worldwide — exactly as it destroyed the previous variety (Gros Michel) in the 1950s. Wild banana diversity — the genetic backup — is disappearing with tropical forests.',
+    interactions: {
+      leucaena: 0.002,  // N-fixer enriches soil for rapid banana growth
+      moringa: 0.001,   // co-pioneer food forest guild
+      guava: -0.001,    // competition for same pioneer frugivore niche
+    },
     gameEffect: 'Fast biomass: produces Food quickly. Provides shade for understory species after 1 season.',
     flavorText: '"You eat the same clone, the same banana, every time. When the fungus comes, there is no backup."',
   },
@@ -602,6 +701,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'EN',
     threatStatus: 'ENDANGERED — 96% of old-growth coast redwood forest logged',
     ecologicalFact: 'Coast Redwoods are the tallest living organisms on Earth (116m). They can live 2,000 years. 96% of old-growth redwood forest was logged between 1850 and 1980. A logging operation can destroy in hours what took 2,000 years to build. The marbled murrelet, which nests only in old-growth, is now endangered — not because of ocean threats but because there are no trees left to nest in.',
+    interactions: {
+      scots_pine: 0.002,   // conifer guild — shared ectomycorrhizal architecture
+      silver_birch: 0.001, // pioneer establishes forest floor conditions for redwood seedlings
+      english_oak: 0.001,  // temperate old-growth companion
+    },
     gameEffect: 'Ultimate keystone. Takes 8 seasons to mature but supports entire ecosystem. Fog collection: passive water bonus. Unlocks rare murrelet entity.',
     flavorText: '"It lived through the Roman Empire, the Black Death, and the Renaissance. It did not survive the chainsaw."',
   },
@@ -626,6 +730,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'VU',
     threatStatus: 'VULNERABLE — cannot be cultivated in plantations; only survives in intact primary forest',
     ecologicalFact: 'Brazil nuts cannot be farmed. They will only fruit in intact primary Amazon rainforest because they need orchid bees for pollination (which need orchids) and agoutis for seed dispersal. Every Brazil nut you eat was harvested from a standing wild forest. The nut is proof the forest is alive.',
+    interactions: {
+      vanilla_orchid: 0.006, // orchid bee is the ONLY pollinator — vanilla hosts the bees
+      wild_fig: 0.002,       // Amazon canopy guild
+      leucaena: 0.002,       // N-fixer enriches Amazon forest floor
+    },
     gameEffect: 'Can only be planted on intact forest tiles (adjacent to other mature trees). Requires orchid bee entity. Produces rare Coin resource.',
     flavorText: '"Every Brazil nut is a certificate: this forest is alive. The nut does not grow in desolation."',
   },
@@ -650,6 +759,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Not threatened — widely used in erosion control',
     ecologicalFact: 'Vetiver roots grow 3–4 metres deep within 6 months and can reduce soil erosion by 90%. The World Bank has promoted it in 100+ countries as the most effective low-cost erosion control. One planted hedge can protect an entire hillside from landslide after monsoon rains.',
+    interactions: {
+      alder_seaside: 0.002, // coastal erosion guild — mutual support
+      red_mangrove: 0.001,  // coastal stabiliser triad
+      big_bluestem: 0.001,  // deep-root soil armour companions
+    },
     gameEffect: 'Rapid erosion control. Can be planted on degraded coastal/slope tiles immediately. +50% soil health to adjacent tiles.',
     flavorText: '"The roots you cannot see are holding the mountain in place."',
   },
@@ -674,6 +788,11 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Ancient groves (1,000–5,000 years old) threatened by land clearing and Xylella fastidiosa bacteria',
     ecologicalFact: 'The oldest olive tree in the world, in Crete, is estimated to be 4,000 years old and still produces olives. A 2,000-year-old olive tree in a Tunisian grove was bulldozed in 2019 to make way for a tourist road. Xylella fastidiosa bacteria, introduced from the Americas, is now killing ancient olive groves in Italy — 21 million trees dead.',
+    interactions: {
+      acacia: 0.002,   // Mediterranean-savanna boundary: both thrive in thin rocky soils
+      moringa: 0.001,  // warm dryland medicinal guild
+      baobab: 0.001,   // ancient slow-growing canopy guild
+    },
     gameEffect: 'Slow-growing. Ancient (mature 5 seasons) olives have ×2 biodiversity bonus and produce Coin passively.',
     flavorText: '"Older than Rome, it still gives fruit. We have bulldozed them for car parks."',
   },
@@ -698,6 +817,10 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Amazon wetland habitat severely threatened by hydroelectric dam construction and soy agriculture',
     ecologicalFact: 'The Victoria amazonica lily pad can support the weight of a child. It operates a 2-day pollination cycle that traps scarab beetles overnight with warmth and scent, then releases them dusted in pollen the second morning. This architectural flower discovered modern structural engineering 50 years before Joseph Paxton designed the Crystal Palace — he acknowledged copying its leaf structure.',
+    interactions: {
+      alder: 0.003,        // riparian N-fixer fuels aquatic productivity
+      common_reed: 0.003,  // aquatic guild mutualism: reed margins + open lily pads
+    },
     gameEffect: 'Aquatic. Opens on water tiles. Attracts caiman/otter entities. Beetle pollination chain enables adjacent aquatic plants.',
     flavorText: '"The flower that heated a room, trapped a beetle, and taught an architect how to build a palace."',
   },

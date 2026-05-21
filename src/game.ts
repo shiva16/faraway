@@ -15,6 +15,10 @@ import {
 import { queueTrain, tickTrainQueue, updateUnits, trainQueue } from './units';
 import { SPECIES, getSpecies } from './botany';
 import { THREATS, STARTING_THREAT } from './threats';
+import {
+  ForestZone, ZONE_SIZE,
+  makeZone, tickZone,
+} from './ecology';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -153,6 +157,8 @@ let npcsActive: string[] = [];
 let plantMode           = false;
 let selectedSpeciesId: string | null = null;
 let pJustPressed        = false;
+let forestZones         = new Map<string, ForestZone>();
+let lastGlvDay          = -1;   // tracks which day GLV was last stepped
 let speciesPanelPage    = 0;       // pagination for species catalogue
 let biodiversityIndex   = 0;       // 0–100, recalculated each second
 let educationPopup: { lines: string[]; timer: number } | null = null;
@@ -688,73 +694,101 @@ function drawBuildMode() {
       && !save.buildings.some(b => b.tx === tx && b.ty === ty);
 
     const { sx, sy } = worldToScreen(tx, ty);
-    // Tint the hovered tile
     ctx.fillStyle = valid ? 'rgba(80,200,80,0.3)' : 'rgba(200,60,60,0.3)';
     ctx.fillRect(sx, sy, TILE_PX * def2.size, TILE_PX * def2.size);
-    // Ghost building
     drawBuildingSprite(selectedBuildKind, sx + TILE_PX / 2, sy + TILE_PX / 2, SCALE, true);
-    // Grid outline
     ctx.strokeStyle = valid ? 'rgba(80,200,80,0.7)' : 'rgba(200,60,60,0.7)';
     ctx.lineWidth = 1;
     ctx.strokeRect(sx, sy, TILE_PX * def2.size, TILE_PX * def2.size);
   }
 
-  // Bottom build panel
-  const PANEL_H = 80, PAD = 12;
-  ctx.fillStyle = 'rgba(6,4,1,0.92)';
-  ctx.fillRect(0, canvas.height - PANEL_H, canvas.width, PANEL_H);
-  ctx.strokeStyle = '#5a4828';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(0, canvas.height - PANEL_H, canvas.width, PANEL_H);
+  // ── Numbered build panel (right side) ──────────────────────────────────────
+  const ROW_H = 26, PAD = 10;
+  const PW = 272, PH = BUILDING_DEFS.length * ROW_H + 58;
+  const PX = canvas.width - PW - 14;
+  const PY = (canvas.height - PH) / 2;
 
-  ctx.fillStyle = '#7a6030';
-  ctx.font      = '10px "Courier New", monospace';
+  ctx.fillStyle = 'rgba(4,3,1,0.95)';
+  ctx.fillRect(PX, PY, PW, PH);
+  ctx.strokeStyle = '#5a4020';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(PX, PY, PW, PH);
+
+  ctx.fillStyle = '#c8a040';
+  ctx.font = 'bold 11px "Courier New", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('BUILD MODE  —  Click to place · Esc to cancel · B to close', canvas.width / 2, canvas.height - PANEL_H + 14);
+  ctx.fillText('BUILD  MODE', PX + PW / 2, PY + PAD + 10);
+  ctx.fillStyle = '#4a3820';
+  ctx.font = '9px "Courier New", monospace';
+  ctx.fillText('keys 1–9, 0  ·  Enter = place here', PX + PW / 2, PY + PAD + 24);
   ctx.textAlign = 'left';
 
-  const SLOT_W = 130;
-  const totalW = BUILDING_DEFS.length * SLOT_W + (BUILDING_DEFS.length - 1) * PAD;
-  let ix = (canvas.width - totalW) / 2;
-  const iy = canvas.height - PANEL_H + 20;
-
-  for (const def of BUILDING_DEFS) {
+  let ry = PY + 40;
+  for (let idx = 0; idx < BUILDING_DEFS.length; idx++) {
+    const def = BUILDING_DEFS[idx];
     const affordable = canAfford(save.resources, def.cost);
     const alreadyBuilt = def.unique && save.buildings.some(b => b.kind === def.kind);
     const active = selectedBuildKind === def.kind;
+    const keyLabel = idx < 9 ? `[${idx + 1}]` : '[0]';
 
-    ctx.fillStyle = alreadyBuilt
-      ? 'rgba(30,30,20,0.6)'
-      : active
-        ? 'rgba(100,80,20,0.8)'
+    ctx.fillStyle = active
+      ? 'rgba(100,78,18,0.9)'
+      : alreadyBuilt
+        ? 'rgba(24,22,12,0.7)'
         : affordable
-          ? 'rgba(40,30,10,0.8)'
-          : 'rgba(20,18,10,0.5)';
-    ctx.fillRect(ix, iy, SLOT_W, 52);
-    ctx.strokeStyle = active ? '#c8a020' : alreadyBuilt ? '#333' : affordable ? '#6a5020' : '#302818';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(ix, iy, SLOT_W, 52);
+          ? 'rgba(36,28,10,0.8)'
+          : 'rgba(16,14,8,0.5)';
+    ctx.fillRect(PX + PAD, ry, PW - PAD * 2, ROW_H - 2);
 
-    ctx.fillStyle = alreadyBuilt ? '#444' : affordable ? '#d4c890' : '#604830';
-    ctx.font = 'bold 11px "Courier New", monospace';
-    ctx.fillText(def.label, ix + 8, iy + 16);
+    ctx.strokeStyle = active ? '#d4a820' : alreadyBuilt ? '#2a2410' : affordable ? '#5a4018' : '#2a2010';
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.strokeRect(PX + PAD, ry, PW - PAD * 2, ROW_H - 2);
 
+    // Key badge
+    ctx.fillStyle = active ? '#d4a820' : affordable && !alreadyBuilt ? '#a08030' : '#403820';
+    ctx.font = 'bold 9px "Courier New", monospace';
+    ctx.fillText(keyLabel, PX + PAD + 4, ry + 16);
+
+    // Building name
+    ctx.fillStyle = alreadyBuilt ? '#504838' : affordable ? '#d4c880' : '#604830';
+    ctx.font = (active ? 'bold ' : '') + '10px "Courier New", monospace';
+    ctx.fillText(def.label, PX + PAD + 28, ry + 16);
+
+    // Cost or status
     if (alreadyBuilt) {
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = '#3a3020';
       ctx.font = '9px "Courier New", monospace';
-      ctx.fillText('already built', ix + 8, iy + 30);
+      ctx.textAlign = 'right';
+      ctx.fillText('built', PX + PW - PAD - 2, ry + 16);
     } else {
-      const costParts: string[] = [];
-      if (def.cost.wood  > 0) costParts.push(`${def.cost.wood}W`);
-      if (def.cost.stone > 0) costParts.push(`${def.cost.stone}S`);
-      if (def.cost.food  > 0) costParts.push(`${def.cost.food}F`);
-      if (def.cost.coin  > 0) costParts.push(`${def.cost.coin}C`);
-      ctx.fillStyle = affordable ? '#a08838' : '#603828';
+      const cp: string[] = [];
+      if (def.cost.wood  > 0) cp.push(`${def.cost.wood}W`);
+      if (def.cost.stone > 0) cp.push(`${def.cost.stone}S`);
+      if (def.cost.food  > 0) cp.push(`${def.cost.food}F`);
+      if (def.cost.coin  > 0) cp.push(`${def.cost.coin}C`);
+      ctx.fillStyle = affordable ? '#a08030' : '#502818';
       ctx.font = '9px "Courier New", monospace';
-      ctx.fillText(costParts.join(' · '), ix + 8, iy + 30);
+      ctx.textAlign = 'right';
+      ctx.fillText(cp.join(' '), PX + PW - PAD - 2, ry + 16);
     }
+    ctx.textAlign = 'left';
+    ry += ROW_H;
+  }
 
-    ix += SLOT_W + PAD;
+  // Footer
+  if (selectedBuildKind) {
+    const selDef = BUILDING_DEFS.find(d => d.kind === selectedBuildKind)!;
+    ctx.fillStyle = '#7ad860';
+    ctx.font = 'bold 10px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${selDef.label} — Enter to place at feet`, PX + PW / 2, PY + PH - 9);
+    ctx.textAlign = 'left';
+  } else {
+    ctx.fillStyle = '#3a3020';
+    ctx.font = '9px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[Esc] cancel  ·  click map to place', PX + PW / 2, PY + PH - 9);
+    ctx.textAlign = 'left';
   }
 }
 
@@ -1536,6 +1570,39 @@ function drawHelp() {
       ],
     },
     {
+      heading: 'SURVIVAL  (read this first if you keep dying)',
+      rows: [
+        ['Hunger bar drops', 'to 0 → HP drains fast. Rest often.'],
+        ['E near Shelter',   'Full heal + +50 hunger. Set respawn point.'],
+        ['Food nodes',       'E at dark shore rocks / fish pools'],
+        ['Night + wolves',   'Sanity drains. Stay near fire or shelter.'],
+        ['Signal Fire',      'Build one. Stops night sanity drain.'],
+        ['B → 1 → Enter',   'Place Shelter at your feet immediately'],
+        ['Space bar',        'Attack. Fight raiders, wolves, threat camps'],
+        ['R after death',    'Respawn at last shelter (lose 20% resources)'],
+      ],
+    },
+    {
+      heading: 'RESTORATION  (the main game)',
+      rows: [
+        ['P key',            'Open species catalogue — pick a plant'],
+        ['Click grass/forest','Plant selected species there'],
+        ['Pioneers first',   'Acacia, Birch, Leucaena — plant on bare ground'],
+        ['Add 3+ species',   'Zone becomes THRIVING (green shimmer)'],
+        ['Combat threats',   'Space near threat camp to chip away HP'],
+        ['Carbon Credits',   'Earned by planting. Needed for rare species'],
+      ],
+    },
+    {
+      heading: 'BUILD MODE  (B key)',
+      rows: [
+        ['Keys 1–9, 0',     'Select building instantly (no clicking)'],
+        ['Enter',           'Place selected building at your feet'],
+        ['Click map',       'Place building at mouse position'],
+        ['Shelter first',   'Must have shelter + workshop for Era II'],
+      ],
+    },
+    {
       heading: 'TIPS',
       rows: [
         ['Night',          'Wolves emerge; Spirit Fox appears'],
@@ -2125,7 +2192,7 @@ function updateRaiders(dt: number): void {
 
 function updateSurvival(dt: number): void {
   const secs = dt / 1000;
-  save.hunger = Math.max(0, (save.hunger ?? 100) - (player.moving ? 1.2 : 0.7) * secs);
+  save.hunger = Math.max(0, (save.hunger ?? 100) - (player.moving ? 0.6 : 0.25) * secs);
   if ((save.hunger ?? 100) < 10) save.hp = Math.max(0, (save.hp ?? 100) - 1 * secs);
   if ((save.hp ?? 100) <= 0 && !isDead) isDead = true;
 
@@ -2567,9 +2634,52 @@ function updateForest(dt: number): void {
   // Update biodiversity index
   biodiversityIndex = calcBiodiversityIndex();
 
+  // ── GLV zone simulation (once per game day) ──────────────────────────────
+  const currentDay = save.dayCount ?? 0;
+  if (currentDay !== lastGlvDay) {
+    lastGlvDay = currentDay;
+
+    // Group planted tiles by zone
+    const zoneSpecies = new Map<string, Set<string>>();
+    for (const key of Object.keys(save.plantedTiles ?? {})) {
+      const [tx, ty] = key.split(',').map(Number);
+      const zid = `${Math.floor(tx / ZONE_SIZE)},${Math.floor(ty / ZONE_SIZE)}`;
+      if (!zoneSpecies.has(zid)) zoneSpecies.set(zid, new Set());
+      zoneSpecies.get(zid)!.add((save.plantedTiles ?? {})[key].speciesId);
+    }
+
+    // Tick or create each active zone
+    for (const [zid, sids] of zoneSpecies) {
+      const sidArr = [...sids];
+      const existing = forestZones.get(zid);
+      if (!existing || existing.speciesIds.join(',') !== sidArr.sort().join(',')) {
+        // Rebuild zone if species composition changed
+        forestZones.set(zid, makeZone(zid, sidArr, SPECIES));
+      } else {
+        forestZones.set(zid, tickZone(existing));
+      }
+    }
+    // Remove zones that no longer have any plants
+    for (const zid of forestZones.keys()) {
+      if (!zoneSpecies.has(zid)) forestZones.delete(zid);
+    }
+
+    // Feed zone health back to individual tile health
+    for (const [key, pt] of Object.entries(save.plantedTiles ?? {})) {
+      const [tx, ty] = key.split(',').map(Number);
+      const zid = `${Math.floor(tx / ZONE_SIZE)},${Math.floor(ty / ZONE_SIZE)}`;
+      const zone = forestZones.get(zid);
+      if (!zone) continue;
+      const sidIdx = zone.speciesIds.indexOf(pt.speciesId);
+      if (sidIdx >= 0) {
+        // Nudge tile health toward zone population for this species
+        pt.health = Math.min(1, Math.max(0.05, pt.health * 0.9 + zone.N[sidIdx] * 0.1));
+      }
+    }
+  }
+
   // Update threat camps
   for (const tc of (save.threatCamps ?? [])) {
-    // Show educational text when player approaches
     const d = Math.sqrt((player.x - tc.tx) ** 2 + (player.y - tc.ty) ** 2);
     if (d < 4 && !tc.educationShown) {
       tc.educationShown = true;
@@ -2615,6 +2725,38 @@ function plantSpecies(speciesId: string, tx: number, ty: number): boolean {
 }
 
 function drawForestLayer(): void {
+  // ── Zone stability overlays ───────────────────────────────────────────────
+  const pulse = Math.sin(Date.now() / 700) * 0.5 + 0.5;
+  for (const [zid, zone] of forestZones) {
+    if (zone.stability === 'empty' || zone.stability === 'growing') continue;
+    const [zx, zy] = zid.split(',').map(Number);
+    const { sx, sy } = worldToScreen(zx * ZONE_SIZE, zy * ZONE_SIZE);
+    const zw = ZONE_SIZE * TILE_PX, zh = ZONE_SIZE * TILE_PX;
+
+    if (zone.stability === 'thriving') {
+      ctx.fillStyle = `rgba(40,200,60,${0.04 + pulse * 0.05})`;
+      ctx.fillRect(sx, sy, zw, zh);
+      // Corner glow dots
+      ctx.fillStyle = `rgba(80,255,80,${0.2 + pulse * 0.3})`;
+      for (const [cx2, cy2] of [[sx+4,sy+4],[sx+zw-4,sy+4],[sx+4,sy+zh-4],[sx+zw-4,sy+zh-4]] as [number,number][]) {
+        ctx.beginPath(); ctx.arc(cx2, cy2, 2, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (zone.stability === 'stressed') {
+      ctx.fillStyle = `rgba(200,140,20,${0.04 + pulse * 0.06})`;
+      ctx.fillRect(sx, sy, zw, zh);
+    } else if (zone.stability === 'collapsed') {
+      ctx.fillStyle = 'rgba(60,40,30,0.18)';
+      ctx.fillRect(sx, sy, zw, zh);
+      // Warning icon centre of zone
+      const mx = sx + zw / 2, my = sy + zh / 2;
+      ctx.fillStyle = `rgba(200,80,30,${0.4 + pulse * 0.4})`;
+      ctx.font = '11px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('✗', mx, my + 4);
+      ctx.textAlign = 'left';
+    }
+  }
+
   const tiles = save.plantedTiles ?? {};
   for (const [key, pt] of Object.entries(tiles)) {
     const [tx, ty] = key.split(',').map(Number);
@@ -2719,8 +2861,8 @@ function drawPlantPanel(): void {
 }
 
 function drawBiodiversityHUD(): void {
-  const W = 160, H = 14, x = (canvas.width - W) / 2, y = 8;
-  ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(x - 2, y - 2, W + 4, H + 4);
+  const W = 200, H = 14, x = (canvas.width - W) / 2, y = 8;
+  ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(x - 2, y - 2, W + 4, H + 22);
   ctx.fillStyle = '#0a1a0a'; ctx.fillRect(x, y, W, H);
   const pct = biodiversityIndex / 100;
   const col = pct < 0.25 ? '#803010' : pct < 0.5 ? '#a07010' : pct < 0.75 ? '#60a030' : '#20e040';
@@ -2728,7 +2870,22 @@ function drawBiodiversityHUD(): void {
   ctx.strokeStyle = '#204810'; ctx.lineWidth = 1; ctx.strokeRect(x, y, W, H);
   ctx.fillStyle = '#90d060'; ctx.font = '8px "Courier New", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(`🌿 Biodiversity ${biodiversityIndex}%`, x + W / 2, y + 10);
+  ctx.fillText(`Biodiversity ${biodiversityIndex}%  ·  CC:${save.carbonCredits ?? 0}`, x + W / 2, y + 10);
+
+  // Zone stability summary
+  let thriving = 0, stressed = 0, collapsed = 0;
+  for (const z of forestZones.values()) {
+    if (z.stability === 'thriving') thriving++;
+    else if (z.stability === 'stressed') stressed++;
+    else if (z.stability === 'collapsed') collapsed++;
+  }
+  const zoneParts: string[] = [];
+  if (thriving  > 0) zoneParts.push(`${thriving}✦`);
+  if (stressed  > 0) zoneParts.push(`${stressed}~`);
+  if (collapsed > 0) zoneParts.push(`${collapsed}✗`);
+  const zoneStr = zoneParts.length ? zoneParts.join(' ') : 'no zones yet';
+  ctx.fillStyle = '#507840';
+  ctx.fillText(`zones: ${zoneStr}`, x + W / 2, y + 24);
   ctx.textAlign = 'left';
 }
 
@@ -3664,10 +3821,27 @@ export function startGame(
     keys[e.key] = true;
     if (e.key === 'e' || e.key === 'E') eJustPressed = true;
     if (e.key === 'f' || e.key === 'F') fJustPressed = true;
-    if (e.key === '1') spellKeyPress = 'fire';
-    if (e.key === '2') spellKeyPress = 'water';
-    if (e.key === '3') spellKeyPress = 'earth';
-    if (e.key === '4') spellKeyPress = 'wind';
+    if (['1','2','3','4','5','6','7','8','9','0'].includes(e.key)) {
+      if (buildMode) {
+        // Number keys select building in build mode
+        const idx = e.key === '0' ? 9 : parseInt(e.key) - 1;
+        if (idx < BUILDING_DEFS.length) {
+          const def = BUILDING_DEFS[idx];
+          const alreadyBuilt = def.unique && save.buildings.some(b => b.kind === def.kind);
+          if (!alreadyBuilt && canAfford(save.resources, def.cost))
+            selectedBuildKind = selectedBuildKind === def.kind ? null : def.kind;
+        }
+      } else {
+        if (e.key === '1') spellKeyPress = 'fire';
+        if (e.key === '2') spellKeyPress = 'water';
+        if (e.key === '3') spellKeyPress = 'earth';
+        if (e.key === '4') spellKeyPress = 'wind';
+      }
+    }
+    if (buildMode && e.key === 'Enter' && selectedBuildKind) {
+      placeBuilding(selectedBuildKind, Math.floor(player.x), Math.floor(player.y));
+      selectedBuildKind = null;
+    }
     if (e.key === 'Tab') { e.preventDefault(); discPanelOpen = !discPanelOpen; dialogActive = false; helpPanelOpen = false; }
     if (e.key === 'h' || e.key === 'H') { hJustPressed = true; }
     if (e.key === 'b' || e.key === 'B') { bJustPressed = true; }
@@ -3800,29 +3974,27 @@ export function startGame(
 
     // Build mode: select building from panel or place on world
     if (buildMode) {
-      const PANEL_H = 80, PAD = 12, SLOT_W = 130;
-      const panelY = canvas.height - PANEL_H;
+      const ROW_H = 26;
+      const PW = 272, PH = BUILDING_DEFS.length * ROW_H + 58;
+      const PX = canvas.width - PW - 14;
+      const PY = (canvas.height - PH) / 2;
 
-      if (e.clientY >= panelY) {
-        // Clicked the panel — select a building kind
-        const totalW = BUILDING_DEFS.length * SLOT_W + (BUILDING_DEFS.length - 1) * PAD;
-        let ix = (canvas.width - totalW) / 2;
-        for (const def of BUILDING_DEFS) {
-          if (e.clientX >= ix && e.clientX <= ix + SLOT_W) {
-            const alreadyBuilt = def.unique && save.buildings.some(b => b.kind === def.kind);
-            if (!alreadyBuilt && canAfford(save.resources, def.cost)) {
-              selectedBuildKind = def.kind;
-            }
-            return;
+      if (e.clientX >= PX && e.clientX <= PX + PW && e.clientY >= PY && e.clientY <= PY + PH) {
+        // Clicked the panel — select a building by row
+        const row = Math.floor((e.clientY - (PY + 40)) / ROW_H);
+        if (row >= 0 && row < BUILDING_DEFS.length) {
+          const def = BUILDING_DEFS[row];
+          const alreadyBuilt = def.unique && save.buildings.some(b => b.kind === def.kind);
+          if (!alreadyBuilt && canAfford(save.resources, def.cost)) {
+            selectedBuildKind = selectedBuildKind === def.kind ? null : def.kind;
           }
-          ix += SLOT_W + PAD;
         }
+        return;
       } else if (selectedBuildKind) {
         // Clicked world — place building
         const tx = Math.floor(e.clientX / TILE_PX + player.x - canvas.width  / 2 / TILE_PX);
         const ty = Math.floor(e.clientY / TILE_PX + player.y - canvas.height / 2 / TILE_PX);
         placeBuilding(selectedBuildKind, tx, ty);
-        // Keep build mode open, deselect after placing
         selectedBuildKind = null;
       }
     }
