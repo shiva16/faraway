@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "px": 9.345054049190336,
-  "py": 21.395913677266083,
+  "px": 33.96254361127779,
+  "py": 17.215316736654213,
   "dir": "left",
   "discoveries": [
     "old_fire",
@@ -35,31 +35,45 @@
     "dep_s4": 1779335930117,
     "evt_storm_workshop": true
   },
-  "playTime": 2949.2090000006615,
-  "lastSaved": "2026-05-21T03:59:05.438Z",
+  "playTime": 2952.1949000006143,
+  "lastSaved": "2026-05-21T04:13:19.194Z",
   "collectedRunes": [],
   "essence": 100,
   "resources": {
-    "wood": 24,
-    "stone": 7,
+    "wood": 19,
+    "stone": 5,
     "food": 0,
-    "coin": 8
+    "coin": 6
   },
   "buildings": [],
   "era": 1,
   "shipParts": [],
-  "hp": 0,
-  "hunger": 27.98485000000001,
+  "hp": 50,
+  "hunger": 59.74338,
   "sanity": 0,
   "researched": [],
   "inventory": [],
   "equippedItem": null,
   "season": "winter",
-  "seasonTimer": 6.750099999993318,
+  "seasonTimer": 3.7977000000409857,
   "explored": [],
   "respawnX": 33.96254361127779,
   "respawnY": 17.215316736654213,
   "enemyCampHp": 400,
   "raidLevel": 2,
-  "dayCount": 3
+  "dayCount": 3,
+  "plantedTiles": {},
+  "threatCamps": [
+    {
+      "id": "camp_logging_start",
+      "threatId": "industrial_logging",
+      "tx": 5,
+      "ty": 8,
+      "hp": 400,
+      "maxHp": 400,
+      "educationShown": false
+    }
+  ],
+  "biodiversityLog": [],
+  "carbonCredits": 0
 }
