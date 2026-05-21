@@ -66,7 +66,7 @@ export interface Discovery {
   symbol: string;
 }
 
-// ── Entities ──────────────────────────────────────────────────────────────────
+// ── Entities (wildlife) ───────────────────────────────────────────────────────
 
 export type EntityKind = 'deer' | 'bird' | 'wolf' | 'fox';
 
@@ -82,6 +82,40 @@ export interface Entity {
   stateTimer: number;
   alive: boolean;
   flock?: number;
+  hp?: number;
+  maxHp?: number;
+}
+
+// ── Units (player's people) ───────────────────────────────────────────────────
+
+export type UnitKind = 'villager' | 'soldier';
+
+export type UnitTask =
+  | 'idle'
+  | 'gathering'  // walking to / working at a resource node
+  | 'returning'  // carrying resources back to nearest building
+  | 'moving'     // following a move command
+  | 'attacking'  // fighting an enemy
+  | 'patrolling';
+
+export interface Unit {
+  id: string;
+  kind: UnitKind;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  hp: number;
+  maxHp: number;
+  task: UnitTask;
+  taskTarget: string | null;   // resource node id / entity id / null
+  selected: boolean;
+  frame: number;
+  frameTimer: number;
+  attackCooldown: number;
+  carryKind: 'wood' | 'stone' | 'food' | 'coin' | null;
+  carryAmount: number;
+  alive: boolean;
 }
 
 // ── Spells ────────────────────────────────────────────────────────────────────
@@ -113,9 +147,9 @@ export interface ResourceNode {
   kind: ResourceKind;
   tx: number;
   ty: number;
-  yield: number;        // amount per gather
-  respawnSecs: number;  // real seconds until restock
-  label: string;        // gather prompt verb
+  yield: number;
+  respawnSecs: number;
+  label: string;
 }
 
 // ── Buildings ─────────────────────────────────────────────────────────────────
@@ -127,11 +161,38 @@ export interface PlacedBuilding {
   kind: BuildingKind;
   tx: number;
   ty: number;
+  hp: number;
+  maxHp: number;
 }
 
-// ── Era ───────────────────────────────────────────────────────────────────────
+// ── Items & Inventory ─────────────────────────────────────────────────────────
 
-export type Era = 1 | 2 | 3;
+export type ItemKind = 'axe' | 'pickaxe' | 'sword' | 'medicine' | 'ration';
+
+export interface Item {
+  kind: ItemKind;
+  qty: number;
+}
+
+// ── Era + Season ──────────────────────────────────────────────────────────────
+
+export type Era    = 1 | 2 | 3;
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+
+// ── Tech ─────────────────────────────────────────────────────────────────────
+
+export type TechId =
+  | 'better_tools'      // +50% gather yield
+  | 'archery'           // unlocks soldiers with ranged attack
+  | 'masonry';          // buildings cost -25% stone
+
+export interface TechDef {
+  id: TechId;
+  label: string;
+  desc: string;
+  cost: Resources;
+  requires: TechId | null;
+}
 
 // ── Save state ────────────────────────────────────────────────────────────────
 
@@ -141,21 +202,36 @@ export interface SaveState {
   py: number;
   dir: Dir;
   discoveries: string[];
-  flags: Record<string, boolean | number>;   // supports timestamps too
+  flags: Record<string, boolean | number>;
   playTime: number;
   lastSaved: string;
   collectedRunes: RuneKind[];
   essence: number;
-  // v3 additions
+  // v3
   resources: Resources;
   buildings: PlacedBuilding[];
   era: Era;
-  shipParts: string[];   // 'hull' | 'sail' | 'compass'
+  shipParts: string[];
+  // v4
+  hp: number;
+  hunger: number;
+  sanity: number;
+  researched: TechId[];
+  inventory: Item[];
+  equippedItem: ItemKind | null;
+  season: Season;
+  seasonTimer: number;   // real seconds remaining in current season
+  explored: number[];    // run-length encoded fog-of-war
+  respawnX: number;
+  respawnY: number;
+  enemyCampHp: number;
+  raidLevel: number;     // current raiders-per-night count
+  dayCount: number;      // in-game days elapsed
 }
 
 export function defaultSave(): SaveState {
   return {
-    version: 3,
+    version: 4,
     px: 24,
     py: 30,
     dir: 'up',
@@ -169,5 +245,19 @@ export function defaultSave(): SaveState {
     buildings: [],
     era: 1,
     shipParts: [],
+    hp: 100,
+    hunger: 100,
+    sanity: 100,
+    researched: [],
+    inventory: [],
+    equippedItem: null,
+    season: 'summer',
+    seasonTimer: 120,
+    explored: [],
+    respawnX: 24,
+    respawnY: 30,
+    enemyCampHp: 400,
+    raidLevel: 1,
+    dayCount: 0,
   };
 }

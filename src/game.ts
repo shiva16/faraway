@@ -1,5 +1,5 @@
 import { T, WORLD_W, WORLD_H } from './types';
-import type { TileDef, Player, Interactable, SaveState, Entity, RuneKind, ActiveSpell, BuildingKind, ResourceKind } from './types';
+import type { TileDef, Player, Interactable, SaveState, Entity, RuneKind, ActiveSpell, BuildingKind, Unit, ResourceKind } from './types';
 import {
   TILE_DEFS, buildWorld, INTERACTABLES, DISCOVERIES,
   outerTile, getDailyNotes, getDailyAtmosphere,
@@ -9,8 +9,10 @@ import {
 import type { Atmosphere } from './world';
 import {
   BUILDING_DEFS, RESOURCE_NODES, SHIP_PARTS,
+  TECH_DEFS, ITEM_DEFS, NPC_DEFS, RANDOM_EVENTS,
   canAfford, deductCost, resourceColor, resourceIcon,
 } from './building';
+import { queueTrain, tickTrainQueue, updateUnits, trainQueue } from './units';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -94,6 +96,56 @@ let whaleY              = 0;
 
 // ── Ghost ship ────────────────────────────────────────────────────────────────
 let ghostShipX  = -8.0;   // tile X (starts off-screen left)
+
+// ── Units ─────────────────────────────────────────────────────────────────────
+let units: Unit[]           = [];
+let selectedUnits: string[] = [];
+
+// ── Combat ────────────────────────────────────────────────────────────────────
+const PLAYER_MAX_HP     = 100;
+const PLAYER_MAX_HUNGER = 100;
+const PLAYER_MAX_SANITY = 100;
+let   attackCooldown    = 0;
+let   attackFlash       = 0;
+let   attackDirX        = 0;
+let   attackDirY        = 1;
+let   spaceJustPressed  = false;
+let   deathFade         = 0;
+let   isDead            = false;
+
+// ── Enemy camp ────────────────────────────────────────────────────────────────
+const CAMP_X            = 5;
+const CAMP_Y            = 8;
+let   raiders: Entity[] = [];
+let   raidWarning       = 0;
+
+// ── Panels ────────────────────────────────────────────────────────────────────
+let   techPanelOpen     = false;
+let   tJustPressed      = false;
+let   inventoryOpen     = false;
+let   iJustPressed      = false;
+let   craftTarget: BuildingKind | null = null;
+
+// ── Fog of war ────────────────────────────────────────────────────────────────
+let   fogGrid: boolean[][] = [];
+const FOG_REVEAL_RADIUS    = 5;
+
+// ── Seasons ───────────────────────────────────────────────────────────────────
+type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+const SEASON_ORDER: Season[] = ['spring', 'summer', 'autumn', 'winter'];
+
+// ── Random events ─────────────────────────────────────────────────────────────
+let   pendingEvent: typeof RANDOM_EVENTS[0] | null = null;
+let   eventBannerTimer  = 0;
+let   lastDayCount      = 0;
+
+// ── Sanity shadows ────────────────────────────────────────────────────────────
+const SHADOWS = Array.from({ length: 6 }, (_, i) => ({
+  x: Math.sin(i * 1.1) * 0.4 + 0.5, y: Math.cos(i * 0.9) * 0.4 + 0.5, phase: i * 0.7,
+}));
+
+// ── NPC state ─────────────────────────────────────────────────────────────────
+let npcsActive: string[] = [];
 
 // ── Build mode ────────────────────────────────────────────────────────────────
 let buildMode           = false;
@@ -1843,6 +1895,10 @@ function movePlayer(dt: number) {
   // Wide clamp — allows far ocean exploration while preventing numeric overflow
   player.x = Math.max(-80, Math.min(WORLD_W + 80, player.x));
   player.y = Math.max(-80, Math.min(WORLD_H + 80, player.y));
+  // Update direction attack vector
+  if (dx !== 0 || dy !== 0) { attackDirX = dx; attackDirY = dy; }
+  // Reveal fog
+  if (fogGrid.length) revealFog(player.x, player.y);
 
   // Walk animation
   if (player.moving) {
@@ -1853,6 +1909,522 @@ function movePlayer(dt: number) {
     }
   } else {
     player.frame = 0;
+  }
+}
+
+// ── Fog of war ────────────────────────────────────────────────────────────────
+
+function initFog(): boolean[][] {
+  const grid: boolean[][] = [];
+  for (let y = 0; y < WORLD_H; y++) grid.push(new Array(WORLD_W).fill(false));
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const fy = CAMP_Y + dy, fx = CAMP_X + dx;
+    if (fy >= 0 && fy < WORLD_H && fx >= 0 && fx < WORLD_W) grid[fy][fx] = true;
+  }
+  return grid;
+}
+
+function revealFog(px: number, py: number): void {
+  const r = FOG_REVEAL_RADIUS;
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (dx * dx + dy * dy > r * r) continue;
+    const fy = Math.floor(py) + dy, fx = Math.floor(px) + dx;
+    if (fy >= 0 && fy < WORLD_H && fx >= 0 && fx < WORLD_W) fogGrid[fy][fx] = true;
+  }
+}
+
+function drawFog() {
+  const startX = Math.floor(player.x - canvas.width  / 2 / TILE_PX) - 1;
+  const startY = Math.floor(player.y - canvas.height / 2 / TILE_PX) - 1;
+  const endX   = startX + Math.ceil(canvas.width  / TILE_PX) + 3;
+  const endY   = startY + Math.ceil(canvas.height / TILE_PX) + 3;
+  for (let ty = startY; ty <= endY; ty++) {
+    for (let tx = startX; tx <= endX; tx++) {
+      if (tx < 0 || ty < 0 || tx >= WORLD_W || ty >= WORLD_H) continue;
+      if (fogGrid[ty]?.[tx]) continue;
+      const { sx, sy } = worldToScreen(tx, ty);
+      ctx.fillStyle = 'rgba(0,0,0,0.78)';
+      ctx.fillRect(sx, sy, TILE_PX, TILE_PX);
+    }
+  }
+}
+
+// ── Combat ────────────────────────────────────────────────────────────────────
+
+function playerAttack(): void {
+  if (attackCooldown > 0) return;
+  const swordBonus = save.equippedItem === 'sword' ? 25 : 0;
+  const smithBonus = (save.flags['ren_skill'] as boolean) ? 25 : 0;
+  const dmg = 25 + swordBonus + smithBonus;
+  attackCooldown = 30;
+  attackFlash    = 10;
+  attackDirX = player.dir === 'left' ? -1 : player.dir === 'right' ? 1 : 0;
+  attackDirY = player.dir === 'up'   ? -1 : player.dir === 'down'  ? 1 : 0;
+
+  for (const e of [...entities, ...raiders]) {
+    if (!e.alive) continue;
+    const dx = e.x - player.x, dy = e.y - player.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const dot  = dx * attackDirX + dy * attackDirY;
+    if (dist < 1.5 && (dist < 0.8 || dot > 0)) {
+      if (e.hp === undefined) e.hp = 40;
+      e.hp -= dmg;
+      if (e.hp <= 0) {
+        e.alive = false;
+        if (raiders.includes(e)) { save.resources.coin += 2; save.resources.wood += 1; }
+        else setTimeout(() => { e.alive = true; e.hp = 40; e.x = 8; e.y = 18; e.state = 'idle'; }, 30000);
+      }
+    }
+  }
+  if (audioCtx) {
+    const osc = audioCtx.createOscillator(); const g = audioCtx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.value = 200;
+    osc.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.12);
+    g.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+    osc.connect(g); g.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+  }
+}
+
+function drawAttackArc(): void {
+  if (attackFlash <= 0) return;
+  const { sx, sy } = worldToScreen(player.x, player.y);
+  const angle = Math.atan2(attackDirY, attackDirX);
+  ctx.globalAlpha = attackFlash / 10;
+  ctx.strokeStyle = '#ffe0a0'; ctx.lineWidth = 3 * SCALE;
+  ctx.beginPath(); ctx.arc(sx, sy, TILE_PX * 1.4, angle - 0.7, angle + 0.7); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+// ── Enemy camp ────────────────────────────────────────────────────────────────
+
+function drawEnemyCamp(): void {
+  if (save.enemyCampHp <= 0) return;
+  const { sx, sy } = worldToScreen(CAMP_X, CAMP_Y);
+  const cx = sx + TILE_PX / 2, cy = sy + TILE_PX / 2, s = SCALE;
+
+  ctx.fillStyle = '#1e1418';
+  ctx.beginPath(); ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#4a2828'; ctx.lineWidth = s;
+  ctx.beginPath(); ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2); ctx.stroke();
+
+  for (let i = 0; i < 4; i++) {
+    const angle = i * Math.PI / 2;
+    ctx.fillStyle = '#d8c8a8';
+    ctx.fillRect(cx + Math.cos(angle) * 8 * s - s, cy + Math.sin(angle) * 8 * s - 5 * s, 2 * s, 10 * s);
+  }
+  const flicker = Math.sin(wavePhase * 6) * 0.5 + 0.5;
+  ctx.fillStyle = `rgb(${160 + Math.floor(flicker * 40)},${40 + Math.floor(flicker * 20)},10)`;
+  ctx.beginPath(); ctx.ellipse(cx, cy, 2 * s, 3 * s + flicker * s, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (fogGrid[CAMP_Y]?.[CAMP_X]) {
+    const barW = 30 * s;
+    ctx.fillStyle = '#400'; ctx.fillRect(cx - barW / 2, cy - 14 * s, barW, 3 * s);
+    ctx.fillStyle = '#c83030'; ctx.fillRect(cx - barW / 2, cy - 14 * s, barW * (save.enemyCampHp / 400), 3 * s);
+    ctx.fillStyle = '#d8c8a8'; ctx.font = '8px "Courier New", monospace';
+    ctx.textAlign = 'center'; ctx.fillText('Enemy Camp', cx, cy - 16 * s); ctx.textAlign = 'left';
+  }
+}
+
+function spawnRaid(): void {
+  const count = Math.min((save.raidLevel ?? 1) + 1, 6);
+  for (let i = 0; i < count; i++) {
+    raiders.push({
+      id: `raider_${Date.now()}_${i}`, kind: 'wolf',
+      x: CAMP_X + (Math.random() - 0.5) * 3, y: CAMP_Y + (Math.random() - 0.5) * 3,
+      vx: 0, vy: 0, phase: i * 0.8, state: 'hunt', stateTimer: 0, alive: true, hp: 40, maxHp: 40,
+    });
+  }
+  raidWarning = 240;
+}
+
+function updateRaiders(dt: number): void {
+  const spd = dt / 16.67;
+  const isNight = dayTime < 420 || dayTime >= 1020;
+  if (!isNight) {
+    for (const r of raiders) {
+      const dx = CAMP_X - r.x, dy = CAMP_Y - r.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      r.x += (dx / d) * 0.06 * spd; r.y += (dy / d) * 0.06 * spd;
+      if (d < 1) r.alive = false;
+    }
+    raiders = raiders.filter(r => r.alive);
+    return;
+  }
+
+  for (const r of raiders) {
+    if (!r.alive) continue;
+    let tx = player.x, ty = player.y;
+    let bestD = Math.sqrt((player.x - r.x) ** 2 + (player.y - r.y) ** 2);
+    for (const b of save.buildings) {
+      const d = Math.sqrt((b.tx - r.x) ** 2 + (b.ty - r.y) ** 2);
+      if (d < bestD) { bestD = d; tx = b.tx; ty = b.ty; }
+    }
+    const dx = tx - r.x, dy = ty - r.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+    r.x += (dx / d) * 0.038 * spd; r.y += (dy / d) * 0.038 * spd;
+
+    const pdx = player.x - r.x, pdy = player.y - r.y;
+    if (Math.sqrt(pdx * pdx + pdy * pdy) < 1.0 && waterVeilTimer <= 0 && windStepTimer <= 0) {
+      save.hp = Math.max(0, (save.hp ?? 100) - 0.3 * spd);
+      essenceFlash = 8;
+      if (save.hp <= 0 && !isDead) { isDead = true; }
+    }
+    for (const b of save.buildings) {
+      const bdx = b.tx - r.x, bdy = b.ty - r.y;
+      if (Math.sqrt(bdx * bdx + bdy * bdy) < 1.2) b.hp = Math.max(0, b.hp - 0.08 * spd);
+    }
+  }
+  raiders = raiders.filter(r => r.alive);
+  save.buildings = save.buildings.filter(b => b.hp > 0);
+}
+
+// ── Survival (hunger + sanity + seasons) ─────────────────────────────────────
+
+function updateSurvival(dt: number): void {
+  const secs = dt / 1000;
+  save.hunger = Math.max(0, (save.hunger ?? 100) - (player.moving ? 1.2 : 0.7) * secs);
+  if ((save.hunger ?? 100) < 10) save.hp = Math.max(0, (save.hp ?? 100) - 1 * secs);
+  if ((save.hp ?? 100) <= 0 && !isDead) isDead = true;
+
+  const isNight = dayTime < 420 || dayTime >= 1020;
+  const nearWolf = entities.some(e => e.kind === 'wolf' && e.alive && Math.sqrt((player.x - e.x) ** 2 + (player.y - e.y) ** 2) < 5);
+  const nearFire = save.buildings.some(b => (b.kind === 'signal_fire' || b.kind === 'shelter') && Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 4);
+  let sd = 0;
+  if (isNight && nearWolf) sd -= 4 * secs;
+  if (nearFire) sd += 3 * secs;
+  if (spiritMode) sd += secs;
+  save.sanity = Math.max(0, Math.min(PLAYER_MAX_SANITY, (save.sanity ?? 100) + sd));
+
+  save.seasonTimer = (save.seasonTimer ?? 120) - secs;
+  if (save.seasonTimer <= 0) {
+    const idx = SEASON_ORDER.indexOf((save.season ?? 'summer') as Season);
+    save.season = SEASON_ORDER[(idx + 1) % 4] as any;
+    save.seasonTimer = 120;
+    eraBannerText = `✦  ${(save.season as string).toUpperCase()}  ✦`;
+    eraBannerTimer = 180;
+  }
+
+  const day = Math.floor(save.playTime / 120);
+  if (day > lastDayCount) {
+    lastDayCount = day;
+    save.dayCount = (save.dayCount ?? 0) + 1;
+    if (save.dayCount % 3 === 0 && (save.enemyCampHp ?? 400) > 0 && (save.raidLevel ?? 1) < 6)
+      save.raidLevel = (save.raidLevel ?? 1) + 1;
+    if (Math.random() < 0.4) {
+      const eligible = RANDOM_EVENTS.filter(e => e.minDay <= (save.dayCount ?? 0) && !save.flags[`evt_${e.id}`]);
+      if (eligible.length) {
+        const pick = eligible[Math.floor(Math.random() * eligible.length)];
+        pendingEvent = pick; eventBannerTimer = 0; save.flags[`evt_${pick.id}`] = true;
+        const [action, ...rest] = pick.effect.split('_');
+        const val = parseInt(rest[rest.length - 1], 10) || 0;
+        const tgt = rest.slice(0, -1).join('_');
+        if (action === 'bonus') (save.resources as any)[tgt] = ((save.resources as any)[tgt] ?? 0) + val;
+        else if (action === 'steal') (save.resources as any)[tgt] = Math.max(0, ((save.resources as any)[tgt] ?? 0) - val);
+        else if (action === 'raid') save.raidLevel = Math.min(6, (save.raidLevel ?? 1) + 1);
+        else if (action === 'sanity') save.sanity = PLAYER_MAX_SANITY;
+        else if (action === 'dmg') { const ws = save.buildings.find(b => b.kind === 'workshop'); if (ws) ws.hp = Math.max(1, ws.hp - val); }
+      }
+    }
+    for (const npc of NPC_DEFS) {
+      if (!npcsActive.includes(npc.id) && npc.spawnEra <= save.era) npcsActive.push(npc.id);
+    }
+    // Spawn raid at first night of new day
+    if ((save.enemyCampHp ?? 400) > 0) spawnRaid();
+  }
+}
+
+// ── Unit rendering ────────────────────────────────────────────────────────────
+
+function drawUnits(): void {
+  for (const u of units) {
+    if (!u.alive) continue;
+    const { sx, sy } = worldToScreen(u.x - 0.5, u.y - 1);
+    const cx = sx + TILE_PX / 2, cy = sy + TILE_PX / 2 + 2 * SCALE, s = SCALE;
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath(); ctx.ellipse(cx, cy + 9 * s, 5 * s, 2 * s, 0, 0, Math.PI * 2); ctx.fill();
+    if (u.kind === 'villager') {
+      ctx.fillStyle = '#7a5c30'; ctx.beginPath(); ctx.ellipse(cx, cy + 2 * s, 5 * s, 7 * s, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c89060'; ctx.beginPath(); ctx.arc(cx, cy - 5 * s, 4 * s, 0, Math.PI * 2); ctx.fill();
+      if (u.carryKind) { ctx.fillStyle = resourceColor(u.carryKind); ctx.beginPath(); ctx.arc(cx + 4 * s, cy - 3 * s, 2 * s, 0, Math.PI * 2); ctx.fill(); }
+    } else {
+      ctx.fillStyle = '#485870'; ctx.beginPath(); ctx.ellipse(cx, cy + 2 * s, 5 * s, 8 * s, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6878a0'; ctx.beginPath(); ctx.arc(cx, cy - 4 * s, 5 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#c0c8e0'; ctx.lineWidth = s;
+      ctx.beginPath(); ctx.moveTo(cx + 5 * s, cy - 2 * s); ctx.lineTo(cx + 9 * s, cy + 5 * s); ctx.stroke();
+    }
+    const bw = 10 * s;
+    ctx.fillStyle = '#400'; ctx.fillRect(cx - bw / 2, cy - 13 * s, bw, 2 * s);
+    ctx.fillStyle = u.hp > u.maxHp * 0.5 ? '#0c8' : '#f80';
+    ctx.fillRect(cx - bw / 2, cy - 13 * s, bw * (u.hp / u.maxHp), 2 * s);
+    if (u.selected) { ctx.strokeStyle = '#80ff80'; ctx.lineWidth = s; ctx.beginPath(); ctx.ellipse(cx, cy + 8 * s, 6 * s, 2 * s, 0, 0, Math.PI * 2); ctx.stroke(); }
+  }
+  for (const tq of trainQueue) {
+    const bld = save.buildings.find(b => Math.abs(b.tx - tq.spawnX) < 2);
+    if (!bld) continue;
+    const { sx, sy } = worldToScreen(bld.tx, bld.ty);
+    const maxTime = tq.kind === 'villager' ? 20 : 30;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(sx, sy - 8, TILE_PX, 6);
+    ctx.fillStyle = '#40c840'; ctx.fillRect(sx, sy - 8, TILE_PX * (1 - tq.timeLeft / maxTime), 6);
+  }
+}
+
+// ── Survival HUD ──────────────────────────────────────────────────────────────
+
+function drawSurvivalHUD(): void {
+  const BAR_W = 80, BAR_H = 6, GAP = 4, bx = 14, by2 = canvas.height - 80;
+  const hp = save.hp ?? PLAYER_MAX_HP;
+  const hunger = save.hunger ?? PLAYER_MAX_HUNGER;
+  const sanity = save.sanity ?? PLAYER_MAX_SANITY;
+
+  const bars: Array<[number, string, string]> = [
+    [hp / PLAYER_MAX_HP,     hp > 60 ? '#c84040' : '#ff4020', `HP ${Math.ceil(hp)}`],
+    [hunger / PLAYER_MAX_HUNGER, hunger > 50 ? '#c8a040' : '#e07020', `Hunger ${Math.ceil(hunger)}`],
+    [sanity / PLAYER_MAX_SANITY, sanity > 50 ? '#6080c8' : '#8040a8', `Mind ${Math.ceil(sanity)}`],
+  ];
+  bars.forEach(([pct, col, label], i) => {
+    const by3 = by2 + i * (BAR_H + GAP);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(bx - 2, by3 - 2, BAR_W + 4, BAR_H + 4);
+    ctx.fillStyle = col; ctx.fillRect(bx, by3, BAR_W * pct, BAR_H);
+    ctx.fillStyle = '#c0a080'; ctx.font = '8px "Courier New", monospace';
+    ctx.fillText(label, bx + BAR_W + 6, by3 + 6);
+  });
+}
+
+// ── Sanity shadows ────────────────────────────────────────────────────────────
+
+function drawSanityEffects(): void {
+  const sanity = save.sanity ?? PLAYER_MAX_SANITY;
+  if (sanity > 30) return;
+  const intensity = (30 - sanity) / 30;
+  for (const sh of SHADOWS) {
+    const sx2 = (sh.x + Math.sin(wavePhase * 0.6 + sh.phase) * 0.15) * canvas.width;
+    const sy2 = (sh.y + Math.cos(wavePhase * 0.5 + sh.phase * 1.2) * 0.12) * canvas.height * 0.85;
+    const flicker = Math.sin(wavePhase * 2 + sh.phase) * 0.5 + 0.5;
+    ctx.globalAlpha = intensity * flicker * 0.5;
+    ctx.fillStyle = '#1a0030';
+    ctx.beginPath(); ctx.ellipse(sx2, sy2, 18 * SCALE, 28 * SCALE, Math.sin(sh.phase) * 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ff0060'; ctx.globalAlpha = intensity * flicker * 0.8;
+    ctx.fillRect(sx2 - 4 * SCALE, sy2 - 6 * SCALE, 2 * SCALE, 2 * SCALE);
+    ctx.fillRect(sx2 + 2 * SCALE, sy2 - 6 * SCALE, 2 * SCALE, 2 * SCALE);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ── Season tint ───────────────────────────────────────────────────────────────
+
+function drawSeasonTint(): void {
+  const tints: Record<string, string> = {
+    spring: 'rgba(160,230,100,0.04)', summer: 'rgba(255,200,50,0.03)',
+    autumn: 'rgba(200,100,30,0.06)', winter: 'rgba(160,200,255,0.10)',
+  };
+  const t = tints[(save.season as string) ?? 'summer'];
+  if (t) { ctx.fillStyle = t; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+  if (save.season === 'winter') {
+    ctx.fillStyle = 'rgba(220,235,255,0.7)';
+    for (let i = 0; i < 30; i++) {
+      const sx2 = ((Math.sin(i * 1.37) * 0.5 + 0.5 + wavePhase * 0.01 * (0.5 + (i % 3) * 0.3)) % 1) * canvas.width;
+      const sy2 = ((Math.cos(i * 0.91) * 0.5 + 0.5 + wavePhase * 0.008 * (0.3 + (i % 4) * 0.2)) % 1) * canvas.height;
+      ctx.beginPath(); ctx.arc(sx2, sy2, 0.5 + (i % 3) * 0.5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+
+// ── Minimap ───────────────────────────────────────────────────────────────────
+
+function drawMinimap(): void {
+  if (!world) return;
+  const MW = 120, MH = 90;
+  const MX = canvas.width - MW - 14, MY = canvas.height - MH - 70;
+  ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(MX - 2, MY - 2, MW + 4, MH + 4);
+  ctx.strokeStyle = '#4a3828'; ctx.lineWidth = 1; ctx.strokeRect(MX - 2, MY - 2, MW + 4, MH + 4);
+  const sx2 = MW / WORLD_W, sy2 = MH / WORLD_H;
+  for (let ty = 0; ty < WORLD_H; ty++) for (let tx = 0; tx < WORLD_W; tx++) {
+    if (!fogGrid[ty]?.[tx]) { ctx.fillStyle = '#111'; ctx.fillRect(MX + tx * sx2, MY + ty * sy2, sx2, sy2); continue; }
+    const t = world[ty][tx];
+    const cols: Partial<Record<T, string>> = {
+      [T.DEEP_WATER]: '#0c1f38', [T.WATER]: '#1a3d6b', [T.SHALLOW]: '#2d6b8a',
+      [T.SAND]: '#c8975a', [T.GRASS_LIGHT]: '#4a8535', [T.GRASS]: '#2e6120',
+      [T.FOREST_EDGE]: '#1f4a14', [T.FOREST]: '#122b0a', [T.PATH]: '#8b7355',
+      [T.RUIN_WALL]: '#3c3028', [T.RUIN_FLOOR]: '#6b5a48', [T.CAVE_WALL]: '#18181e', [T.CAVE_FLOOR]: '#2e2e38',
+    };
+    ctx.fillStyle = cols[t] ?? '#2e6120'; ctx.fillRect(MX + tx * sx2, MY + ty * sy2, sx2, sy2);
+  }
+  ctx.fillStyle = '#c8a020';
+  for (const b of save.buildings) ctx.fillRect(MX + b.tx * sx2 - 1, MY + b.ty * sy2 - 1, 3, 3);
+  if ((save.enemyCampHp ?? 400) > 0) { ctx.fillStyle = '#c82020'; ctx.fillRect(MX + CAMP_X * sx2 - 2, MY + CAMP_Y * sy2 - 2, 4, 4); }
+  ctx.fillStyle = '#40c840';
+  for (const u of units) { if (!u.alive) continue; ctx.fillRect(MX + u.x * sx2 - 1, MY + u.y * sy2 - 1, 2, 2); }
+  ctx.fillStyle = '#ff8020';
+  for (const r of raiders) { if (!r.alive) continue; ctx.fillRect(MX + r.x * sx2 - 1, MY + r.y * sy2 - 1, 2, 2); }
+  ctx.fillStyle = '#fff'; ctx.fillRect(MX + player.x * sx2 - 2, MY + player.y * sy2 - 2, 4, 4);
+  ctx.fillStyle = '#6a5828'; ctx.font = '8px "Courier New", monospace'; ctx.textAlign = 'center';
+  ctx.fillText('MAP', MX + MW / 2, MY + MH + 10); ctx.textAlign = 'left';
+}
+
+// ── Tech panel ────────────────────────────────────────────────────────────────
+
+function drawTechPanel(): void {
+  if (!techPanelOpen) return;
+  const W = 320, PAD = 16, H = TECH_DEFS.length * 66 + 56;
+  const X = (canvas.width - W) / 2, Y = (canvas.height - H) / 2;
+  ctx.fillStyle = 'rgba(6,4,1,0.96)'; ctx.fillRect(X, Y, W, H);
+  ctx.strokeStyle = '#6a5020'; ctx.lineWidth = 2; ctx.strokeRect(X, Y, W, H);
+  ctx.fillStyle = '#d4a853'; ctx.font = 'bold 13px "Courier New", monospace';
+  ctx.textAlign = 'center'; ctx.fillText('WORKSHOP — TECH RESEARCH', X + W / 2, Y + PAD + 12); ctx.textAlign = 'left';
+  let ry = Y + PAD + 28;
+  for (const tech of TECH_DEFS) {
+    const done = (save.researched ?? []).includes(tech.id);
+    const affordable = !done && canAfford(save.resources, tech.cost);
+    ctx.fillStyle = done ? 'rgba(20,40,20,0.8)' : 'rgba(20,18,10,0.8)';
+    ctx.fillRect(X + PAD, ry, W - PAD * 2, 56);
+    ctx.strokeStyle = done ? '#40a840' : '#6a5020'; ctx.lineWidth = 1; ctx.strokeRect(X + PAD, ry, W - PAD * 2, 56);
+    ctx.fillStyle = done ? '#60c860' : '#d4c890'; ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.fillText((done ? '✓ ' : '') + tech.label, X + PAD + 10, ry + 16);
+    ctx.fillStyle = '#8a7848'; ctx.font = '9px "Courier New", monospace'; ctx.fillText(tech.desc, X + PAD + 10, ry + 30);
+    if (!done) {
+      const cs = [tech.cost.wood > 0 ? `${tech.cost.wood}W` : '', tech.cost.stone > 0 ? `${tech.cost.stone}S` : '', tech.cost.food > 0 ? `${tech.cost.food}F` : '', tech.cost.coin > 0 ? `${tech.cost.coin}C` : ''].filter(Boolean).join('·');
+      ctx.fillStyle = affordable ? '#c8a020' : '#603828'; ctx.textAlign = 'right';
+      ctx.fillText(affordable ? `[E] ${cs}` : cs, X + W - PAD - 8, ry + 22); ctx.textAlign = 'left';
+    }
+    ry += 64;
+  }
+  ctx.fillStyle = '#4a3d20'; ctx.font = '10px "Courier New", monospace';
+  ctx.textAlign = 'center'; ctx.fillText('[T] or [Esc] close', X + W / 2, Y + H - 12); ctx.textAlign = 'left';
+}
+
+// ── Inventory panel ───────────────────────────────────────────────────────────
+
+function drawInventoryPanel(): void {
+  if (!inventoryOpen) return;
+  const items = craftTarget ? ITEM_DEFS.filter(i => i.craftAt === craftTarget) : ITEM_DEFS;
+  const W = 340, PAD = 14, H = items.length * 56 + 72;
+  const X = (canvas.width - W) / 2, Y = (canvas.height - H) / 2;
+  ctx.fillStyle = 'rgba(4,4,8,0.97)'; ctx.fillRect(X, Y, W, H);
+  ctx.strokeStyle = '#304860'; ctx.lineWidth = 2; ctx.strokeRect(X, Y, W, H);
+  ctx.fillStyle = '#80aad0'; ctx.font = 'bold 12px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(craftTarget ? `${craftTarget.toUpperCase().replace('_', ' ')} — CRAFT` : 'INVENTORY', X + W / 2, Y + PAD + 12);
+  const inv = save.inventory ?? [];
+  ctx.fillStyle = '#405870'; ctx.font = '9px "Courier New", monospace';
+  ctx.fillText(`Carrying: ${inv.length ? inv.map(i => `${i.kind}×${i.qty}`).join(' ') : 'empty'}`, X + W / 2, Y + PAD + 26);
+  ctx.textAlign = 'left';
+  let ry = Y + PAD + 36;
+  for (const def of items) {
+    const owned = inv.find(i => i.kind === def.kind);
+    const affordable = canAfford(save.resources, def.cost);
+    ctx.fillStyle = 'rgba(16,20,30,0.8)'; ctx.fillRect(X + PAD, ry, W - PAD * 2, 46);
+    ctx.strokeStyle = '#304060'; ctx.lineWidth = 1; ctx.strokeRect(X + PAD, ry, W - PAD * 2, 46);
+    ctx.fillStyle = '#c0d4f0'; ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.fillText(def.label + (owned ? ` (×${owned.qty})` : ''), X + PAD + 10, ry + 16);
+    ctx.fillStyle = '#607888'; ctx.font = '9px "Courier New", monospace'; ctx.fillText(def.desc, X + PAD + 10, ry + 29);
+    const cs = [def.cost.wood > 0 ? `${def.cost.wood}W` : '', def.cost.stone > 0 ? `${def.cost.stone}S` : '', def.cost.food > 0 ? `${def.cost.food}F` : '', def.cost.coin > 0 ? `${def.cost.coin}C` : ''].filter(Boolean).join('·');
+    ctx.fillStyle = affordable ? '#a0c820' : '#603828'; ctx.textAlign = 'right';
+    ctx.fillText(affordable ? `[E] ${cs}` : cs, X + W - PAD - 8, ry + 22); ctx.textAlign = 'left';
+    ry += 54;
+  }
+  ctx.fillStyle = '#304050'; ctx.font = '10px "Courier New", monospace';
+  ctx.textAlign = 'center'; ctx.fillText('[I] or [Esc] close', X + W / 2, Y + H - 12); ctx.textAlign = 'left';
+}
+
+// ── NPC rendering ──────────────────────────────────────────────────────────────
+
+function drawNPCs(): void {
+  for (const npcId of npcsActive) {
+    const def = NPC_DEFS.find(n => n.id === npcId);
+    if (!def) continue;
+    const { sx, sy } = worldToScreen(def.tx, def.ty);
+    const cx = sx + TILE_PX / 2, cy = sy + TILE_PX / 2, s = SCALE;
+    const cols: Record<string, string> = { maya: '#2060a0', ren: '#804020', lena: '#206050' };
+    ctx.fillStyle = cols[def.id] ?? '#606060';
+    ctx.beginPath(); ctx.ellipse(cx, cy + 2 * s, 5 * s, 8 * s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c89060'; ctx.beginPath(); ctx.arc(cx, cy - 5 * s, 4 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(cx - 18, cy - 16 * s, 36, 12);
+    ctx.fillStyle = '#d4c890'; ctx.font = '8px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText(def.name, cx, cy - 16 * s + 9); ctx.textAlign = 'left';
+    const dx = player.x - def.tx, dy = player.y - def.ty;
+    if (Math.sqrt(dx * dx + dy * dy) < 2) {
+      const prompt = `[ E ] speak with ${def.name}`;
+      const pw = prompt.length * 8 + 24, px2 = canvas.width / 2 - pw / 2, py2 = canvas.height - 54;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(px2, py2, pw, 28);
+      ctx.strokeStyle = '#6080a0'; ctx.lineWidth = 1; ctx.strokeRect(px2, py2, pw, 28);
+      ctx.fillStyle = '#d4c890'; ctx.font = '12px "Courier New", monospace'; ctx.textAlign = 'center';
+      ctx.fillText(prompt, canvas.width / 2, py2 + 18); ctx.textAlign = 'left';
+    }
+  }
+}
+
+// ── Raid + event banner ───────────────────────────────────────────────────────
+
+function drawRaidWarning(): void {
+  if (raidWarning > 0) {
+    raidWarning--;
+    ctx.globalAlpha = Math.min(1, raidWarning / 40);
+    ctx.fillStyle = 'rgba(100,0,0,0.8)';
+    const msg = '⚔  RAIDERS FROM THE NORTHWEST  ⚔';
+    const tw = msg.length * 7.5 + 30;
+    ctx.fillRect(canvas.width / 2 - tw / 2, 60, tw, 28);
+    ctx.fillStyle = '#ff6060'; ctx.font = '12px "Courier New", monospace';
+    ctx.textAlign = 'center'; ctx.fillText(msg, canvas.width / 2, 79); ctx.globalAlpha = 1; ctx.textAlign = 'left';
+  }
+  if (pendingEvent && eventBannerTimer < 300) {
+    eventBannerTimer++;
+    const alpha = Math.min(1, eventBannerTimer / 40) * Math.min(1, (300 - eventBannerTimer) / 40);
+    const col = pendingEvent.tone === 'good' ? '#60c880' : pendingEvent.tone === 'bad' ? '#ff8040' : '#c8c060';
+    ctx.globalAlpha = Math.max(0, alpha);
+    const msg = `${pendingEvent.title}: ${pendingEvent.desc}`;
+    const t2 = msg.length > 70 ? msg.slice(0, 67) + '…' : msg;
+    const tw = t2.length * 6.5 + 24;
+    ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(canvas.width / 2 - tw / 2, 96, tw, 26);
+    ctx.fillStyle = col; ctx.font = '10px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText(t2, canvas.width / 2, 113); ctx.globalAlpha = 1; ctx.textAlign = 'left';
+    if (eventBannerTimer >= 300) pendingEvent = null;
+  }
+}
+
+// ── Death overlay ─────────────────────────────────────────────────────────────
+
+function drawDeath(): void {
+  if (!isDead) return;
+  deathFade = Math.min(1, deathFade + 0.02);
+  ctx.fillStyle = `rgba(0,0,0,${deathFade})`; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (deathFade >= 1) {
+    ctx.fillStyle = '#c03030'; ctx.font = 'bold 20px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('You fell.', canvas.width / 2, canvas.height / 2 - 20);
+    ctx.fillStyle = '#806060'; ctx.font = '12px "Courier New", monospace';
+    ctx.fillText('Lost 20% resources.', canvas.width / 2, canvas.height / 2 + 10);
+    ctx.fillText('[ R ] Respawn at shelter', canvas.width / 2, canvas.height / 2 + 36);
+    ctx.textAlign = 'left';
+    if (keys['r'] || keys['R']) {
+      save.hp = PLAYER_MAX_HP * 0.5; save.hunger = 60; save.essence = 60;
+      save.resources.wood  = Math.floor(save.resources.wood  * 0.8);
+      save.resources.stone = Math.floor(save.resources.stone * 0.8);
+      save.resources.food  = Math.floor(save.resources.food  * 0.8);
+      save.resources.coin  = Math.floor(save.resources.coin  * 0.8);
+      player.x = save.respawnX ?? 24; player.y = save.respawnY ?? 30;
+      isDead = false; deathFade = 0;
+    }
+  }
+}
+
+// ── NPC interaction ───────────────────────────────────────────────────────────
+
+function handleNpcInteract(npcId: string): void {
+  const def = NPC_DEFS.find(n => n.id === npcId);
+  if (!def) return;
+  const done = save.flags[`npc_quest_done_${npcId}`] as boolean | undefined;
+  if (!done) {
+    if (save.resources[def.questItem] >= def.questAmount) {
+      save.resources[def.questItem] -= def.questAmount;
+      save.flags[`npc_quest_done_${npcId}`] = true;
+      save.flags[`${npcId}_skill`] = true;
+      openDialog({ id: `npc_r_${npcId}`, tx: def.tx, ty: def.ty, range: 999, prompt: '',
+        lines: [...def.rewardLines, `Skill: ${def.rewardLabel}`] });
+    } else {
+      openDialog({ id: `npc_q_${npcId}`, tx: def.tx, ty: def.ty, range: 999, prompt: '',
+        lines: [...def.questLines, `Need: ${def.questAmount} ${def.questItem}  (have: ${save.resources[def.questItem]})`] });
+    }
+  } else {
+    openDialog({ id: `npc_c_${npcId}`, tx: def.tx, ty: def.ty, range: 999, prompt: '',
+      lines: [`${def.name} — skill: ${def.rewardLabel}`] });
   }
 }
 
@@ -1894,7 +2466,7 @@ function placeBuilding(kind: BuildingKind, tx: number, ty: number) {
   if (save.buildings.some(b => b.tx === tx && b.ty === ty)) return;
 
   deductCost(save.resources, def.cost);
-  save.buildings.push({ id: `${kind}_${Date.now()}`, kind, tx, ty });
+  save.buildings.push({ id: `${kind}_${Date.now()}`, kind, tx, ty, hp: def.maxHp, maxHp: def.maxHp });
   checkEraAdvance();
 }
 
@@ -2361,6 +2933,55 @@ function loop(now: number) {
     discPanelOpen = false;
     helpPanelOpen = false;
     shipCraftMenuOpen = false;
+    techPanelOpen = false;
+    inventoryOpen = false;
+  }
+
+  // T key — tech panel
+  if (tJustPressed) {
+    tJustPressed = false;
+    if (!dialogActive && !buildMode) {
+      techPanelOpen = !techPanelOpen;
+      inventoryOpen = false;
+    }
+  }
+
+  // I key — inventory / craft panel
+  if (iJustPressed) {
+    iJustPressed = false;
+    if (!dialogActive && !buildMode) {
+      inventoryOpen = !inventoryOpen;
+      techPanelOpen = false;
+      // detect nearest building for crafting context
+      craftTarget = null;
+      let bestD = 2.5;
+      for (const b of save.buildings) {
+        const d = Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2);
+        if (d < bestD) { bestD = d; craftTarget = b.kind; }
+      }
+    }
+  }
+
+  // Space — player attack
+  if (spaceJustPressed) {
+    spaceJustPressed = false;
+    if (!dialogActive && !isDead) playerAttack();
+  }
+
+  // Death respawn
+  if (isDead) {
+    deathFade = Math.min(1, deathFade + 0.02);
+    if (keys['r'] || keys['R']) {
+      isDead = false; deathFade = 0;
+      player.x = save.respawnX ?? 24; player.y = save.respawnY ?? 30;
+      save.hp = PLAYER_MAX_HP * 0.5;
+      save.hunger = 60;
+      // Lose 20% resources
+      save.resources.wood  = Math.floor(save.resources.wood  * 0.8);
+      save.resources.stone = Math.floor(save.resources.stone * 0.8);
+      save.resources.food  = Math.floor(save.resources.food  * 0.8);
+      save.resources.coin  = Math.floor(save.resources.coin  * 0.8);
+    }
   }
 
   // E key interaction
@@ -2369,28 +2990,77 @@ function loop(now: number) {
     if (dialogActive) {
       if (!dialogJustOpened) advanceDialog();
       dialogJustOpened = false;
+    } else if (techPanelOpen) {
+      // Research first affordable tech at workshop
+      const atWs = save.buildings.some(b => b.kind === 'workshop' &&
+        Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 3);
+      if (atWs) {
+        const tech = TECH_DEFS.find(t => !save.researched.includes(t.id as any) && canAfford(save.resources, t.cost));
+        if (tech) {
+          deductCost(save.resources, tech.cost);
+          save.researched.push(tech.id as any);
+          eraBannerText = `✦  ${tech.label} researched  ✦`; eraBannerTimer = 180;
+        }
+      }
+    } else if (inventoryOpen && craftTarget) {
+      // Craft first affordable item at this building
+      const available = ITEM_DEFS.filter(i => i.craftAt === craftTarget);
+      const craftable = available.find(def => canAfford(save.resources, def.cost));
+      if (craftable) {
+        deductCost(save.resources, craftable.cost);
+        const existing = save.inventory.find(i => i.kind === craftable.kind as any);
+        if (existing) existing.qty++;
+        else save.inventory.push({ kind: craftable.kind as any, qty: 1 });
+        eraBannerText = `✦  Crafted ${craftable.label}  ✦`; eraBannerTimer = 120;
+      }
     } else if (shipCraftMenuOpen) {
-      // Craft next uncrafted ship part (if affordable)
       if (save.shipParts.length === SHIP_PARTS.length) {
-        // All parts done — set sail
         escapePhase = 1;
         shipCraftMenuOpen = false;
       } else {
         const next = SHIP_PARTS.find(p => !save.shipParts.includes(p.id));
         if (next && canAfford(save.resources, next.cost)) craftShipPart(next.id);
       }
-    } else if (!discPanelOpen && !buildMode) {
+    } else if (!discPanelOpen && !buildMode && !isDead) {
       initAudio();
-      // Priority: rune → resource node → dock → interactable
-      const runeCollected = collectNearbyRune();
-      if (!runeCollected) {
-        const node = nearbyResourceNode();
-        if (node) {
-          gatherResource(node.id);
-        } else if (nearDock) {
-          shipCraftMenuOpen = true;
-        } else if (nearbyInteractable) {
-          openDialog(nearbyInteractable);
+
+      // Check NPC proximity first
+      let npcHandled = false;
+      for (const npcId of npcsActive) {
+        const npc = NPC_DEFS.find(n => n.id === npcId);
+        if (!npc) continue;
+        const d = Math.sqrt((player.x - npc.tx) ** 2 + (player.y - npc.ty) ** 2);
+        if (d < 2) { handleNpcInteract(npcId); npcHandled = true; break; }
+      }
+
+      if (!npcHandled) {
+        // Shelter rest
+        const atShelter = save.buildings.some(b => b.kind === 'shelter' &&
+          Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 2.5);
+        if (atShelter) {
+          save.hp     = PLAYER_MAX_HP;
+          save.hunger = Math.min(PLAYER_MAX_HUNGER, (save.hunger ?? 100) + 50);
+          save.essence = ESSENCE_MAX;
+          save.respawnX = player.x; save.respawnY = player.y;
+          eraBannerText = '✦  Rested  ✦'; eraBannerTimer = 120;
+        } else {
+          // Workshop tech panel shortcut
+          const atWorkshop = save.buildings.some(b => b.kind === 'workshop' &&
+            Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 2.5);
+          if (atWorkshop) { techPanelOpen = true; }
+          else {
+            const runeCollected = collectNearbyRune();
+            if (!runeCollected) {
+              const node = nearbyResourceNode();
+              if (node) {
+                gatherResource(node.id);
+              } else if (nearDock) {
+                shipCraftMenuOpen = true;
+              } else if (nearbyInteractable) {
+                openDialog(nearbyInteractable);
+              }
+            }
+          }
         }
       }
     }
@@ -2429,10 +3099,16 @@ function loop(now: number) {
     if (keys['n'] || keys['N']) { save = { ...save, buildings: [], resources: { wood: 0, stone: 0, food: 0, coin: 0 }, era: 1, shipParts: [] }; escapePhase = 0; escapeFade = 0; }
   }
 
-  // Entity + spell + weather updates
+  // Entity + spell + weather + survival updates
   updateEntities(dt);
   updateSpells(dt);
   updateWeather(dt);
+  updateSurvival(dt);
+  updateRaiders(dt);
+  tickTrainQueue(dt, units, save);
+  updateUnits(units, save, dt, [...entities, ...raiders], passable);
+  if (attackFlash > 0) attackFlash--;
+  if (attackCooldown > 0) attackCooldown--;
 
   // Save timer
   if (saveStatusTimer > 0) saveStatusTimer--;
@@ -2501,19 +3177,32 @@ function loop(now: number) {
 
   drawResourceNodes();
   drawBuildings();
+  drawEnemyCamp();
+  drawUnits();
+  drawAttackArc();
+  drawNPCs();
+  drawSeasonTint();
+  drawFog();
   drawZoneBanner();
   drawEraBanner();
+  drawRaidWarning();
   drawInteractPrompt();
   drawDialog();
   drawShipCraftPanel();
   drawDiscoveries();
   drawHelp();
   drawBuildMode();
+  drawTechPanel();
+  drawInventoryPanel();
   drawGatherFlash();
+  drawSurvivalHUD();
+  drawSanityEffects();
   drawHUD();
   drawResourceHUD();
   drawSpiritHUD();
   drawEssenceBar();
+  drawMinimap();
+  drawDeath();
   drawVictory();
 }
 
@@ -2551,6 +3240,27 @@ export function startGame(
   if (save.buildings      === undefined) save.buildings      = [];
   if (save.era            === undefined) save.era            = 1;
   if (save.shipParts      === undefined) save.shipParts      = [];
+  if (save.hp             === undefined) save.hp             = 100;
+  if (save.hunger         === undefined) save.hunger         = 100;
+  if (save.sanity         === undefined) save.sanity         = 100;
+  if (save.researched     === undefined) save.researched     = [];
+  if (save.inventory      === undefined) save.inventory      = [];
+  if (save.equippedItem   === undefined) save.equippedItem   = null;
+  if (save.season         === undefined) save.season         = 'summer';
+  if (save.seasonTimer    === undefined) save.seasonTimer    = 120;
+  if (save.explored       === undefined) save.explored       = [];
+  if (save.respawnX       === undefined) save.respawnX       = save.px;
+  if (save.respawnY       === undefined) save.respawnY       = save.py;
+  if (save.enemyCampHp    === undefined) save.enemyCampHp    = 400;
+  if (save.raidLevel      === undefined) save.raidLevel      = 1;
+  if (save.dayCount       === undefined) save.dayCount       = 0;
+  // Init runtime state
+  fogGrid = initFog();
+  units = [];
+  raiders = [];
+  selectedUnits = [];
+  npcsActive = NPC_DEFS.filter(n => n.spawnEra <= save.era).map(n => n.id);
+  lastDayCount = Math.floor((save.playTime ?? 0) / 120);
   saveSha    = sha;
   onSave     = saveCallback;
   world      = buildWorld();
@@ -2602,9 +3312,25 @@ export function startGame(
     if (e.key === 'Tab') { e.preventDefault(); discPanelOpen = !discPanelOpen; dialogActive = false; helpPanelOpen = false; }
     if (e.key === 'h' || e.key === 'H') { hJustPressed = true; }
     if (e.key === 'b' || e.key === 'B') { bJustPressed = true; }
+    if (e.key === 't' || e.key === 'T') { tJustPressed = true; }
+    if (e.key === 'i' || e.key === 'I') { iJustPressed = true; }
+    if (e.key === ' ') { e.preventDefault(); spaceJustPressed = true; }
+    if (e.key === 'v' || e.key === 'V') {
+      // Train villager at nearest shelter
+      const sh = save.buildings.find(b => b.kind === 'shelter' &&
+        Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 3);
+      if (sh) queueTrain('villager', save, sh.tx, sh.ty);
+    }
+    if (e.key === 'z' || e.key === 'Z') {
+      // Train soldier at nearest workshop
+      const ws = save.buildings.find(b => b.kind === 'workshop' &&
+        Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 3);
+      if (ws) queueTrain('soldier', save, ws.tx, ws.ty);
+    }
     if (e.key === 'Escape') {
       dialogActive = false; discPanelOpen = false; helpPanelOpen = false;
       buildMode = false; selectedBuildKind = null; shipCraftMenuOpen = false;
+      techPanelOpen = false; inventoryOpen = false;
     }
   });
   window.addEventListener('keyup', e => { keys[e.key] = false; });
@@ -2615,7 +3341,41 @@ export function startGame(
     mouseScreenY = e.clientY;
   });
 
-  // Click handler: build placement + help button
+  // Right-click: unit command (move / attack)
+  canvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (selectedUnits.length === 0) return;
+    const camX = player.x * TILE_PX - canvas.width  / 2;
+    const camY = player.y * TILE_PX - canvas.height / 2;
+    const wx = (e.clientX + camX) / TILE_PX;
+    const wy = (e.clientY + camY) / TILE_PX;
+    // Check if right-clicking near an enemy
+    const enemy = [...entities, ...raiders].find(en => {
+      if (!en.alive) return false;
+      return Math.sqrt((en.x - wx) ** 2 + (en.y - wy) ** 2) < 1.0;
+    });
+    for (const id of selectedUnits) {
+      const u = units.find(u => u.id === id);
+      if (!u) continue;
+      if (enemy && u.kind === 'soldier') {
+        u.task = 'attacking'; u.taskTarget = enemy.id;
+        u.targetX = enemy.x; u.targetY = enemy.y;
+      } else {
+        // Check resource node
+        const node = RESOURCE_NODES.find(n => {
+          return Math.sqrt((n.tx - wx) ** 2 + (n.ty - wy) ** 2) < 1.2;
+        });
+        if (node && u.kind === 'villager') {
+          u.task = 'gathering'; u.taskTarget = node.id;
+        } else {
+          u.task = 'moving'; u.taskTarget = null;
+          u.targetX = wx; u.targetY = wy;
+        }
+      }
+    }
+  });
+
+  // Click handler: unit selection + build placement + help button
   canvas.addEventListener('click', e => {
     // [?] button
     const bx = canvas.width - 36, by = canvas.height - 58;
@@ -2624,6 +3384,28 @@ export function startGame(
       discPanelOpen = false;
       dialogActive  = false;
       return;
+    }
+
+    // Unit selection
+    if (!buildMode) {
+      const camX = player.x * TILE_PX - canvas.width  / 2;
+      const camY = player.y * TILE_PX - canvas.height / 2;
+      const wx = (e.clientX + camX) / TILE_PX;
+      const wy = (e.clientY + camY) / TILE_PX;
+      const hit = units.find(u => u.alive && Math.sqrt((u.x - wx) ** 2 + (u.y - wy) ** 2) < 0.7);
+      if (hit) {
+        if (e.shiftKey) {
+          if (selectedUnits.includes(hit.id)) selectedUnits = selectedUnits.filter(id => id !== hit.id);
+          else selectedUnits.push(hit.id);
+        } else {
+          selectedUnits = [hit.id];
+        }
+        for (const u of units) u.selected = selectedUnits.includes(u.id);
+        return;
+      } else if (!e.shiftKey) {
+        selectedUnits = [];
+        for (const u of units) u.selected = false;
+      }
     }
 
     // Build mode: select building from panel or place on world
