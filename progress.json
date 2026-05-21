@@ -24,8 +24,17 @@
     "used_daily_2": true,
     "used_daily_1": true
   },
-  "playTime": 2052.0284999992305,
-  "lastSaved": "2026-05-21T03:34:20.022Z",
+  "playTime": 2055.0176999992386,
+  "lastSaved": "2026-05-21T03:34:34.960Z",
   "collectedRunes": [],
-  "essence": 100
+  "essence": 100,
+  "resources": {
+    "wood": 0,
+    "stone": 0,
+    "food": 0,
+    "coin": 0
+  },
+  "buildings": [],
+  "era": 1,
+  "shipParts": []
 }
