@@ -40,6 +40,10 @@ let dialogJustOpened         = false;
 // Discoveries panel
 let discPanelOpen            = false;
 
+// Help panel
+let helpPanelOpen            = false;
+let hJustPressed             = false;
+
 // Zone name banner
 let zoneName                 = '';
 let zoneNameTimer            = 0;
@@ -860,6 +864,107 @@ function drawDiscoveries() {
   ctx.textAlign  = 'left';
 }
 
+function drawHelp() {
+  if (!helpPanelOpen) return;
+
+  const W = 380, PAD = 18;
+  const sections: Array<{ heading: string; rows: Array<[string, string]> }> = [
+    {
+      heading: 'MOVEMENT',
+      rows: [
+        ['WASD / Arrow keys', 'Move'],
+        ['Walk into water',   'Wade (shallows only)'],
+      ],
+    },
+    {
+      heading: 'ACTIONS',
+      rows: [
+        ['E',   'Interact / read / collect rune'],
+        ['Tab', 'Open discoveries journal'],
+        ['F',   'Toggle Spirit Realm'],
+        ['Esc', 'Close any panel'],
+      ],
+    },
+    {
+      heading: 'SPELLS  (collect runes first)',
+      rows: [
+        ['1', 'Fire Orb — projectile, destroys a wolf'],
+        ['2', 'Water Veil — 4s ward, wolves keep back'],
+        ['3', 'Earth Pulse — shockwave knocks wolves away'],
+        ['4', 'Wind Step — 3s sprint, wolves can\'t touch you'],
+      ],
+    },
+    {
+      heading: 'THE ISLAND',
+      rows: [
+        ['Sacred Grove (NW)',  'Forest clearing — shrine, Wind Rune'],
+        ['The Ruins (E)',      'Stone hall — altar, Fire Rune hidden inside'],
+        ['The Cave (W)',       'Dark cave — tally marks, echo stone'],
+        ['Hilltop (N-centre)', 'Overlook of the whole island'],
+        ['Shore (S)',          'Driftwood, bottle, note — start here'],
+        ['Spirit mode (F)',    'Runes glow; fox leads you to uncollected ones'],
+      ],
+    },
+    {
+      heading: 'TIPS',
+      rows: [
+        ['Night',         'Wolves emerge; Spirit Fox appears'],
+        ['Fog days',      'Ghost ship drifts offshore'],
+        ['Standing still','Essence slowly restores on grass/sand'],
+        ['This island',   'There\'s no way off — that\'s the idea'],
+      ],
+    },
+  ];
+
+  // Measure total height
+  let totalH = PAD * 2 + 14; // top title
+  for (const sec of sections) {
+    totalH += 22 + sec.rows.length * 18 + 8;
+  }
+  totalH += 18; // footer
+  totalH = Math.min(totalH, canvas.height - 60);
+
+  const X = (canvas.width - W) / 2;
+  const Y = (canvas.height - totalH) / 2;
+
+  ctx.fillStyle   = 'rgba(6,4,1,0.96)';
+  ctx.fillRect(X, Y, W, totalH);
+  ctx.strokeStyle = '#5a4828';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(X, Y, W, totalH);
+
+  ctx.fillStyle  = '#d4a853';
+  ctx.font       = 'bold 13px "Courier New", monospace';
+  ctx.textAlign  = 'center';
+  ctx.fillText('FARAWAY  —  HOW TO PLAY', X + W / 2, Y + PAD + 12);
+
+  let rowY = Y + PAD + 30;
+  for (const sec of sections) {
+    ctx.fillStyle  = '#8a6830';
+    ctx.font       = 'bold 10px "Courier New", monospace';
+    ctx.textAlign  = 'left';
+    ctx.fillText(sec.heading, X + PAD, rowY);
+    rowY += 16;
+    for (const [key, desc] of sec.rows) {
+      ctx.fillStyle = 'rgba(30,22,8,0.7)';
+      ctx.fillRect(X + PAD, rowY - 12, W - PAD * 2, 16);
+      ctx.fillStyle = '#c8a050';
+      ctx.font      = '11px "Courier New", monospace';
+      ctx.fillText(key, X + PAD + 6, rowY);
+      ctx.fillStyle = '#9a8860';
+      ctx.fillText(desc, X + PAD + 148, rowY);
+      rowY += 18;
+    }
+    rowY += 8;
+  }
+
+  ctx.fillStyle  = '#4a3d20';
+  ctx.font       = '10px "Courier New", monospace';
+  ctx.textAlign  = 'center';
+  ctx.fillText('[ H ] or [ ? ] or [ Esc ] close', X + W / 2, Y + totalH - 10);
+  ctx.textAlign  = 'left';
+}
+
 function drawEssenceBar() {
   const BAR_W = 120, BAR_H = 8;
   const bx = canvas.width / 2 - BAR_W / 2;
@@ -947,16 +1052,31 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   }
 
-  // Time of day (subtle, bottom-right corner)
+  // Time of day (bottom-right corner)
   const hours = Math.floor(dayTime / 60);
   const mins  = String(Math.floor(dayTime % 60)).padStart(2, '0');
   const ampm  = hours >= 12 ? 'pm' : 'am';
   const h12   = hours % 12 === 0 ? 12 : hours % 12;
   const timeStr = `${h12}:${mins}${ampm}`;
-  ctx.fillStyle  = 'rgba(180,160,80,0.25)';
-  ctx.font       = '10px "Courier New", monospace';
+  const timeW   = timeStr.length * 7 + 16;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(canvas.width - timeW - 12, canvas.height - 30, timeW, 22);
+  ctx.fillStyle  = '#c8b060';
+  ctx.font       = '11px "Courier New", monospace';
   ctx.textAlign  = 'right';
-  ctx.fillText(timeStr, canvas.width - 16, canvas.height - 12);
+  ctx.fillText(timeStr, canvas.width - 18, canvas.height - 14);
+  ctx.textAlign  = 'left';
+
+  // Help button [?] (bottom-right, above time)
+  ctx.fillStyle  = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(canvas.width - 36, canvas.height - 58, 28, 22);
+  ctx.strokeStyle = 'rgba(180,150,60,0.5)';
+  ctx.lineWidth   = 1;
+  ctx.strokeRect(canvas.width - 36, canvas.height - 58, 28, 22);
+  ctx.fillStyle  = '#c8a050';
+  ctx.font       = '12px "Courier New", monospace';
+  ctx.textAlign  = 'center';
+  ctx.fillText('?', canvas.width - 22, canvas.height - 42);
   ctx.textAlign  = 'left';
 }
 
@@ -1124,7 +1244,7 @@ function advanceDialog() {
 // ── Player movement ───────────────────────────────────────────────────────────
 
 function movePlayer(dt: number) {
-  if (dialogActive || discPanelOpen) return;
+  if (dialogActive || discPanelOpen || helpPanelOpen) return;
 
   const up    = keys['ArrowUp']    || keys['w'] || keys['W'];
   const down  = keys['ArrowDown']  || keys['s'] || keys['S'];
@@ -1539,6 +1659,14 @@ function loop(now: number) {
 
   wavePhase += 0.03;
 
+  // Help toggle (H key)
+  if (hJustPressed) {
+    hJustPressed = false;
+    helpPanelOpen = !helpPanelOpen;
+    discPanelOpen = false;
+    dialogActive  = false;
+  }
+
   // Spirit mode toggle (F key)
   if (fJustPressed && !dialogActive) {
     fJustPressed = false;
@@ -1676,6 +1804,7 @@ function loop(now: number) {
   drawInteractPrompt();
   drawDialog();
   drawDiscoveries();
+  drawHelp();
   drawHUD();
   drawSpiritHUD();
   drawEssenceBar();
@@ -1759,10 +1888,21 @@ export function startGame(
     if (e.key === '2') spellKeyPress = 'water';
     if (e.key === '3') spellKeyPress = 'earth';
     if (e.key === '4') spellKeyPress = 'wind';
-    if (e.key === 'Tab') { e.preventDefault(); discPanelOpen = !discPanelOpen; dialogActive = false; }
-    if (e.key === 'Escape') { dialogActive = false; discPanelOpen = false; }
+    if (e.key === 'Tab') { e.preventDefault(); discPanelOpen = !discPanelOpen; dialogActive = false; helpPanelOpen = false; }
+    if (e.key === 'h' || e.key === 'H') { hJustPressed = true; }
+    if (e.key === 'Escape') { dialogActive = false; discPanelOpen = false; helpPanelOpen = false; }
   });
   window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+  // Click the [?] button (bottom-right)
+  canvas.addEventListener('click', e => {
+    const bx = canvas.width - 36, by = canvas.height - 58;
+    if (e.clientX >= bx && e.clientX <= bx + 28 && e.clientY >= by && e.clientY <= by + 22) {
+      helpPanelOpen = !helpPanelOpen;
+      discPanelOpen = false;
+      dialogActive  = false;
+    }
+  });
 
   // Trigger initial save after 3s to create the file
   setTimeout(() => {
