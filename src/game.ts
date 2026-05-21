@@ -19,6 +19,10 @@ import {
   ForestZone, ZoneStability, ZONE_SIZE,
   makeZone, tickZone,
 } from './ecology';
+import {
+  startMusic, toggleMuteMusic, isMusicMuted,
+  setTrackChangeCb, stopMusic,
+} from './music';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -141,6 +145,15 @@ let   welcomeScreen: { isFirst: boolean; alpha: number; timer: number; fadingOut
 
 // ── Ghost ship (runtime, not persisted) ──────────────────────────────────────
 let   ghostShipInteracted = false;
+
+// ── Music / audio ─────────────────────────────────────────────────────────────
+let   musicStarted     = false;
+let   musicTrackName   = '';
+let   musicNameTimer   = 0;   // frames to show track name
+
+// ── Save-and-exit ─────────────────────────────────────────────────────────────
+let   saveExitPending  = false;
+let   saveExitFailed   = false;
 
 // ── Fog of war ────────────────────────────────────────────────────────────────
 let   fogGrid: boolean[][] = [];
@@ -554,8 +567,14 @@ function drawResourceNodes() {
     // Gather prompt when nearby
     const dx = player.x - node.tx, dy = player.y - node.ty;
     if (!isDepleted && Math.sqrt(dx * dx + dy * dy) < 1.8) {
-      const yieldBonus = save.buildings.some(b => b.kind === 'forge') ? ' (+50%)' : '';
-      const prompt = `[ E ] ${node.label}${yieldBonus}`;
+      let mult = 1;
+      if (save.buildings.some(b => b.kind === 'forge')) mult *= 1.5;
+      if (save.researched.includes('better_tools')) mult *= 1.5;
+      if (node.kind === 'wood'  && (save.inventory ?? []).some(i => i.kind === 'axe'))     mult *= 2;
+      if ((node.kind === 'stone' || node.kind === 'coin') && (save.inventory ?? []).some(i => i.kind === 'pickaxe')) mult *= 2;
+      if (node.kind === 'food'  && save.flags['maya_skill']) mult *= 1.5;
+      const bonusStr = mult > 1.01 ? ` (×${parseFloat(mult.toFixed(1))})` : '';
+      const prompt = `[ E ] ${node.label}${bonusStr}`;
       const pw = prompt.length * 8 + 24;
       const px2 = canvas.width / 2 - pw / 2;
       const py2 = canvas.height - 54;
@@ -577,6 +596,7 @@ function drawResourceNodes() {
 // ── Building rendering ────────────────────────────────────────────────────────
 
 function drawBuildings() {
+  const raidsActive = raiders.some(r => r.alive);
   for (const b of save.buildings) {
     const { sx, sy } = worldToScreen(b.tx, b.ty);
     if (sx < -TILE_PX * 2 || sx > canvas.width + TILE_PX * 2) continue;
@@ -584,6 +604,15 @@ function drawBuildings() {
     const cy = sy + TILE_PX / 2;
     const s  = SCALE;
     drawBuildingSprite(b.kind, cx, cy, s, false);
+    // HP bar — shown during raids when building is damaged
+    if (raidsActive && b.hp < b.maxHp) {
+      const bw = TILE_PX - 4, bh = 4, bx2 = sx + 2, by2 = sy - 7;
+      ctx.fillStyle = '#400';
+      ctx.fillRect(bx2, by2, bw, bh);
+      const frac = b.hp / b.maxHp;
+      ctx.fillStyle = frac > 0.5 ? '#4d2' : '#d52';
+      ctx.fillRect(bx2, by2, Math.round(bw * frac), bh);
+    }
   }
 }
 
@@ -1551,6 +1580,65 @@ function drawInteractPrompt() {
   ctx.textAlign   = 'left';
 }
 
+function drawBuildingPrompts() {
+  if (dialogActive || discPanelOpen || isDead || buildMode || plantMode) return;
+
+  for (const b of save.buildings) {
+    let hint = ''; let range = 2.5;
+    switch (b.kind) {
+      case 'shelter':        hint = '[ E ] Rest · restore HP / Hunger'; break;
+      case 'workshop':       hint = '[ E ] Tech Research  ·  [ Z ] Train Soldier'; range = 3; break;
+      case 'forge':          hint = '[ I ] Craft items at Forge'; break;
+      case 'ranger_station': hint = '[ R ] Train Ranger  (max 3)'; range = 3; break;
+      case 'dock':           hint = '[ E ] Build Ship Parts'; break;
+      case 'tree_nursery':   hint = '[ P ] Plant flagship species'; break;
+    }
+    if (!hint) continue;
+    const dx = player.x - b.tx, dy = player.y - b.ty;
+    if (Math.sqrt(dx * dx + dy * dy) > range) continue;
+
+    const { sx, sy } = worldToScreen(b.tx, b.ty);
+    const fw = hint.length * 6.5 + 18;
+    const fx = sx + TILE_PX / 2 - fw / 2;
+    const fy = sy - 10;
+    ctx.fillStyle   = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(fx, fy - 18, fw, 20);
+    ctx.strokeStyle = 'rgba(92,216,96,0.45)';
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(fx, fy - 18, fw, 20);
+    ctx.fillStyle   = '#88d870';
+    ctx.font        = '9px "Space Mono","Courier New",monospace';
+    ctx.textAlign   = 'center';
+    ctx.fillText(hint, sx + TILE_PX / 2, fy - 4);
+    ctx.textAlign   = 'left';
+  }
+
+  // Ghost ship signal fire prompt
+  if (!ghostShipInteracted && ghostShipX > 5 && ghostShipX < WORLD_W - 5) {
+    const fire = save.buildings.find(b => b.kind === 'signal_fire');
+    if (fire) {
+      const fdx = player.x - fire.tx, fdy = player.y - fire.ty;
+      if (Math.sqrt(fdx * fdx + fdy * fdy) < 2.5) {
+        const { sx, sy } = worldToScreen(fire.tx, fire.ty);
+        const hint = '[ E ] Signal the ghost ship';
+        const fw   = hint.length * 6.5 + 18;
+        const fx   = sx + TILE_PX / 2 - fw / 2;
+        const fy   = sy - 32;
+        ctx.fillStyle   = 'rgba(0,0,0,0.72)';
+        ctx.fillRect(fx, fy - 18, fw, 20);
+        ctx.strokeStyle = 'rgba(255,200,80,0.7)';
+        ctx.lineWidth   = 1;
+        ctx.strokeRect(fx, fy - 18, fw, 20);
+        ctx.fillStyle   = '#ffd870';
+        ctx.font        = '9px "Space Mono","Courier New",monospace';
+        ctx.textAlign   = 'center';
+        ctx.fillText(hint, sx + TILE_PX / 2, fy - 4);
+        ctx.textAlign   = 'left';
+      }
+    }
+  }
+}
+
 function drawDialog() {
   if (!dialogActive) return;
   const PAD  = 32, BH = 160, BY = canvas.height - BH - 24;
@@ -1936,7 +2024,7 @@ function drawWelcomeScreen() {
 function drawInfoPanel() {
   if (!infoPanelOpen) return;
 
-  const W = 420, PAD = 18;
+  const W = Math.min(460, canvas.width - 24), PAD = 18;
   const pageData: Array<{ title: string; sections: Array<{ heading: string; rows: Array<[string, string]> }> }> = [
     {
       title: 'STORY & ERAS',
@@ -2150,11 +2238,12 @@ function drawInfoPanel() {
     ctx.fillText(sec.heading, X + PAD, sy);
     sy += 16;
     for (const [label, val] of sec.rows) {
+      const labelW = infoPanelPage === 4 ? 158 : 140;
       ctx.fillStyle = '#607898';
-      ctx.font = '10px "Space Mono", "Courier New", monospace';
+      ctx.font = `${infoPanelPage === 4 ? 9 : 10}px "Space Mono","Courier New",monospace`;
       ctx.fillText(label, X + PAD + 8, sy);
       ctx.fillStyle = '#a0b8e0';
-      const labelW = 140;
+      ctx.font = `${infoPanelPage === 4 ? 9 : 10}px "Space Mono","Courier New",monospace`;
       ctx.fillText(val, X + PAD + 8 + labelW, sy);
       sy += 18;
     }
@@ -2228,6 +2317,23 @@ function drawHUD() {
   ctx.strokeRect(canvas.width - 36, canvas.height - 86, 28, 22);
   ctx.fillStyle  = infoPanelOpen ? '#a0c0ff' : '#8090d0';
   ctx.fillText('?', canvas.width - 22, canvas.height - 70);
+
+  // Music mute [♪] (above ?)
+  const muted = isMusicMuted();
+  ctx.fillStyle  = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(canvas.width - 36, canvas.height - 114, 28, 22);
+  ctx.strokeStyle = muted ? 'rgba(150,60,60,0.7)' : 'rgba(80,160,80,0.5)';
+  ctx.strokeRect(canvas.width - 36, canvas.height - 114, 28, 22);
+  ctx.fillStyle  = muted ? '#c06060' : '#70b860';
+  ctx.fillText(muted ? '♪̶' : '♪', canvas.width - 22, canvas.height - 98);
+
+  // Save & Exit [✦] (above ♪)
+  ctx.fillStyle  = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(canvas.width - 36, canvas.height - 142, 28, 22);
+  ctx.strokeStyle = 'rgba(180,130,60,0.5)';
+  ctx.strokeRect(canvas.width - 36, canvas.height - 142, 28, 22);
+  ctx.fillStyle  = '#c89040';
+  ctx.fillText('✦', canvas.width - 22, canvas.height - 126);
   ctx.textAlign  = 'left';
 }
 
@@ -2324,6 +2430,12 @@ function initAudio() {
   if (audioCtx) return;
   audioCtx = new AudioContext();
   if (audioCtx.state === 'suspended') audioCtx.resume();
+  // Start folk music on first user interaction
+  if (!musicStarted) {
+    musicStarted = true;
+    startMusic(audioCtx);
+    setTrackChangeCb(name => { musicTrackName = name; musicNameTimer = 180; });
+  }
 
   // Ocean: low-frequency noise
   oceanGain = audioCtx.createGain();
@@ -3725,10 +3837,12 @@ function updateEntities(dt: number) {
         }
       }
 
-      // Wolf contact — drain essence
+      // Wolf contact — drain essence AND a small HP bite
       if (distToPlayer < 1.2 && waterVeilTimer <= 0 && windStepTimer <= 0) {
         save.essence = Math.max(0, save.essence - 0.4 * spd);
+        save.hp      = Math.max(0, (save.hp ?? 100) - 0.12 * spd);
         essenceFlash = 8;
+        if (save.hp <= 0 && !isDead) isDead = true;
       }
 
     } else if (e.kind === 'fox') {
@@ -4391,6 +4505,7 @@ function loop(now: number) {
   drawEraBanner();
   drawRaidWarning();
   drawInteractPrompt();
+  drawBuildingPrompts();
   drawDialog();
   drawShipCraftPanel();
   drawDiscoveries();
@@ -4413,6 +4528,48 @@ function loop(now: number) {
   drawVictory();
   drawInfoPanel();
   drawWelcomeScreen();
+  drawMusicName();
+  drawSaveExitOverlay();
+}
+
+function drawMusicName() {
+  if (musicNameTimer <= 0 || !musicTrackName) return;
+  musicNameTimer--;
+  const alpha = musicNameTimer > 30 ? 1 : musicNameTimer / 30;
+  const txt = `♪  ${musicTrackName}`;
+  const tw  = txt.length * 7 + 20;
+  ctx.globalAlpha = alpha * 0.75;
+  ctx.fillStyle   = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(canvas.width / 2 - tw / 2, canvas.height - 82, tw, 22);
+  ctx.fillStyle   = '#9abf78';
+  ctx.font        = '11px "Space Mono","Courier New",monospace';
+  ctx.textAlign   = 'center';
+  ctx.fillText(txt, canvas.width / 2, canvas.height - 66);
+  ctx.textAlign   = 'left';
+  ctx.globalAlpha = 1;
+}
+
+function drawSaveExitOverlay() {
+  if (!saveExitPending) return;
+  ctx.fillStyle   = 'rgba(4,8,4,0.88)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle   = '#5cd860';
+  ctx.font        = 'bold 18px "Space Mono","Courier New",monospace';
+  ctx.textAlign   = 'center';
+  if (saveExitFailed) {
+    ctx.fillStyle = '#d04040';
+    ctx.fillText('✗  Save failed', canvas.width / 2, canvas.height / 2 - 16);
+    ctx.fillStyle = '#80a060';
+    ctx.font      = '12px "Space Mono","Courier New",monospace';
+    ctx.fillText('Check your GitHub token · progress may be lost', canvas.width / 2, canvas.height / 2 + 12);
+    ctx.fillText('Reloading in 4 seconds…', canvas.width / 2, canvas.height / 2 + 36);
+  } else {
+    ctx.fillText('✦  Saving forest…', canvas.width / 2, canvas.height / 2);
+    ctx.fillStyle = '#3a6828';
+    ctx.font      = '11px "Space Mono","Courier New",monospace';
+    ctx.fillText('Your progress is being written to the cloud', canvas.width / 2, canvas.height / 2 + 28);
+  }
+  ctx.textAlign = 'left';
 }
 
 // ── Save trigger ──────────────────────────────────────────────────────────────
@@ -4434,6 +4591,35 @@ function triggerSave() {
       saveStatus      = '✗ save failed';
       saveStatusTimer = 90;
     });
+}
+
+function triggerSaveAndExit(): void {
+  if (saveExitPending) return;
+  saveExitPending = true;
+  cancelAnimationFrame(rafId);
+  stopMusic();
+  save.px = player.x; save.py = player.y; save.dir = player.dir;
+  save.lastSaved = new Date().toISOString();
+  // Keep the overlay drawn by manually calling once
+  ctx.fillStyle = 'rgba(4,8,4,0.88)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#5cd860';
+  ctx.font = 'bold 18px "Space Mono","Courier New",monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('✦  Saving forest…', canvas.width / 2, canvas.height / 2);
+  ctx.textAlign = 'left';
+
+  onSave(save, saveSha).then(sha => {
+    saveSha = sha;
+    localStorage.removeItem('faraway_draft');
+    localStorage.removeItem('faraway_draft_time');
+    setTimeout(() => window.location.reload(), 400);
+  }).catch(() => {
+    saveExitFailed = true;
+    // Restart loop just to show the error overlay
+    rafId = requestAnimationFrame(loop);
+    setTimeout(() => window.location.reload(), 4000);
+  });
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -4459,7 +4645,6 @@ export function startGame(
   if (save.equippedItem   === undefined) save.equippedItem   = null;
   if (save.season         === undefined) save.season         = 'summer';
   if (save.seasonTimer    === undefined) save.seasonTimer    = 120;
-  if (save.explored       === undefined) save.explored       = [];
   if (save.respawnX       === undefined) save.respawnX       = save.px;
   if (save.respawnY       === undefined) save.respawnY       = save.py;
   if (save.enemyCampHp    === undefined) save.enemyCampHp    = 400;
@@ -4641,26 +4826,25 @@ export function startGame(
     }
   });
 
-  // Click handler: unit selection + build placement + help button
+  // Click handler: unit selection + build placement + HUD buttons
   canvas.addEventListener('click', e => {
+    const rx = canvas.width - 36;
     // [H] help button
-    const bx = canvas.width - 36, by = canvas.height - 58;
-    if (e.clientX >= bx && e.clientX <= bx + 28 && e.clientY >= by && e.clientY <= by + 22) {
-      helpPanelOpen = !helpPanelOpen;
-      infoPanelOpen = false;
-      discPanelOpen = false;
-      dialogActive  = false;
-      return;
+    if (e.clientX >= rx && e.clientX <= rx + 28 && e.clientY >= canvas.height - 58 && e.clientY <= canvas.height - 36) {
+      helpPanelOpen = !helpPanelOpen; infoPanelOpen = false; discPanelOpen = false; dialogActive = false; return;
     }
     // [?] info guide button
-    const ix = canvas.width - 36, iy = canvas.height - 86;
-    if (e.clientX >= ix && e.clientX <= ix + 28 && e.clientY >= iy && e.clientY <= iy + 22) {
-      infoPanelOpen = !infoPanelOpen;
-      helpPanelOpen = false;
-      discPanelOpen = false;
-      dialogActive  = false;
-      if (welcomeScreen && !welcomeScreen.fadingOut) welcomeScreen.fadingOut = true;
-      return;
+    if (e.clientX >= rx && e.clientX <= rx + 28 && e.clientY >= canvas.height - 86 && e.clientY <= canvas.height - 64) {
+      infoPanelOpen = !infoPanelOpen; helpPanelOpen = false; discPanelOpen = false; dialogActive = false;
+      if (welcomeScreen && !welcomeScreen.fadingOut) welcomeScreen.fadingOut = true; return;
+    }
+    // [♪] music mute button
+    if (e.clientX >= rx && e.clientX <= rx + 28 && e.clientY >= canvas.height - 114 && e.clientY <= canvas.height - 92) {
+      initAudio(); toggleMuteMusic(); return;
+    }
+    // [✦] save & exit button
+    if (e.clientX >= rx && e.clientX <= rx + 28 && e.clientY >= canvas.height - 142 && e.clientY <= canvas.height - 120) {
+      triggerSaveAndExit(); return;
     }
 
     // Plant mode: select species from panel or plant on world

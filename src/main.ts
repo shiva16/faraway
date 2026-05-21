@@ -335,6 +335,7 @@ loginBtn.addEventListener('click', async () => {
     setTimeout(() => { overlay.style.display = 'none'; }, 950);
 
     startGame(resolvedSave, sha, (s, currentSha) => writeSave(token, s, currentSha));
+    initMobileControls();
 
   } catch (err) {
     errorEl.textContent  = (err as Error).message;
@@ -348,6 +349,95 @@ const cached = localStorage.getItem('faraway_token');
 if (cached) {
   patInput.value = cached;
   loginBtn.disabled = false;
+}
+
+// ── Service worker ────────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/faraway/sw.js', { scope: '/faraway/' })
+      .catch(() => {}); // fail silently in dev
+  });
+}
+
+// ── Mobile touch controls ─────────────────────────────────────────────────────
+function initMobileControls(): void {
+  const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const ctrl = document.getElementById('mobile-controls');
+  if (!ctrl || !isTouch) return;
+  ctrl.classList.add('active');
+
+  // Hold a key while pointer is pressed
+  function holdKey(id: string, key: string): void {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const down = (): void => {
+      el.classList.add('held');
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    };
+    const up = (): void => {
+      el.classList.remove('held');
+      window.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true }));
+    };
+    el.addEventListener('pointerdown', e => { e.preventDefault(); down(); });
+    el.addEventListener('pointerup',     up);
+    el.addEventListener('pointerleave',  up);
+    el.addEventListener('pointercancel', up);
+  }
+
+  // Single tap — fires keydown then keyup
+  function tapKey(id: string, key: string): void {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true })), 60);
+    });
+  }
+
+  holdKey('dpad-up',    'ArrowUp');
+  holdKey('dpad-down',  'ArrowDown');
+  holdKey('dpad-left',  'ArrowLeft');
+  holdKey('dpad-right', 'ArrowRight');
+
+  tapKey('btn-e',      'e');
+  tapKey('btn-attack', ' ');
+  tapKey('btn-build',  'b');
+  tapKey('btn-plant',  'p');
+  tapKey('btn-inv',    'i');
+  tapKey('btn-esc',    'Escape');
+
+  // Canvas swipe → arrow keys (info panel / plant catalogue page nav)
+  const canvas = document.getElementById('game') as HTMLCanvasElement;
+  if (!canvas) return;
+  let touchX = 0, touchY = 0;
+  canvas.addEventListener('touchstart', e => {
+    touchX = e.touches[0].clientX;
+    touchY = e.touches[0].clientY;
+  }, { passive: true });
+  canvas.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchX;
+    const dy = e.changedTouches[0].clientY - touchY;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      const key = dx < 0 ? 'ArrowRight' : 'ArrowLeft';
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    }
+  }, { passive: true });
+
+  // Long press on canvas → contextmenu (unit commands)
+  let longPressTimer = 0;
+  canvas.addEventListener('touchstart', e => {
+    const touch = e.touches[0];
+    longPressTimer = window.setTimeout(() => {
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: touch.clientX, clientY: touch.clientY, bubbles: true,
+      }));
+    }, 420);
+  }, { passive: true });
+  canvas.addEventListener('touchmove',   () => clearTimeout(longPressTimer), { passive: true });
+  canvas.addEventListener('touchend',    () => clearTimeout(longPressTimer), { passive: true });
+  canvas.addEventListener('touchcancel', () => clearTimeout(longPressTimer), { passive: true });
 }
 
 patInput.addEventListener('blur', () => {

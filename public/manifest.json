@@ -1,0 +1,19 @@
+{
+  "name": "Faraway — Forest Restoration",
+  "short_name": "Faraway",
+  "description": "Restore a devastated island. Plant species, clear threats, set sail.",
+  "start_url": "/faraway/",
+  "scope": "/faraway/",
+  "display": "standalone",
+  "background_color": "#060d06",
+  "theme_color": "#1e4018",
+  "orientation": "landscape",
+  "icons": [
+    { "src": "favicon.svg",          "sizes": "any",     "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png",         "sizes": "192x192", "type": "image/png",     "purpose": "any maskable" },
+    { "src": "icon-512.png",         "sizes": "512x512", "type": "image/png",     "purpose": "any maskable" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png",     "purpose": "any" }
+  ],
+  "screenshots": [],
+  "categories": ["games", "entertainment"]
+}

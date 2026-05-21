@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#091a09"/>
+      <stop offset="100%" stop-color="#020604"/>
+    </radialGradient>
+    <radialGradient id="treeglow" cx="50%" cy="28%" r="40%">
+      <stop offset="0%" stop-color="#20a030" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#20a030" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="starglow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#80ff60" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#4cd840" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="88" fill="url(#bg)"/>
+
+  <!-- Subtle ground fog -->
+  <ellipse cx="256" cy="470" rx="200" ry="28" fill="#0d2a0d" opacity="0.7"/>
+
+  <!-- Tree glow aura behind tree -->
+  <ellipse cx="256" cy="210" rx="130" ry="190" fill="url(#treeglow)"/>
+
+  <!-- ── Pixel-art tree (3-tier fir, each tier a pair of polygons for depth) ── -->
+
+  <!-- Tier 3 — base (darkest, widest) -->
+  <polygon points="256,448 56,334 456,334" fill="#163c10"/>
+  <polygon points="256,436 76,334 436,334" fill="#1c5216"/>
+
+  <!-- Tier 2 — middle -->
+  <polygon points="256,366 100,248 412,248" fill="#226018"/>
+  <polygon points="256,355 118,248 394,248" fill="#288c20"/>
+
+  <!-- Tier 1 — upper -->
+  <polygon points="256,278 148,166 364,166" fill="#2ea828"/>
+  <polygon points="256,268 162,166 350,166" fill="#36cc30"/>
+
+  <!-- Tip apex -->
+  <polygon points="256,196 196,112 316,112" fill="#42e038"/>
+  <polygon points="256,185 208,112 304,112" fill="#52ff48"/>
+
+  <!-- Star glow at tip -->
+  <circle cx="256" cy="94" r="32" fill="url(#starglow)"/>
+  <circle cx="256" cy="94" r="16" fill="#5cd860" opacity="0.95"/>
+  <circle cx="256" cy="94" r="8"  fill="#c0ffa0"/>
+
+  <!-- Sparkle rays from star -->
+  <line x1="256" y1="60"  x2="256" y2="128" stroke="#80ff60" stroke-width="3" stroke-linecap="round" opacity="0.75"/>
+  <line x1="222" y1="94"  x2="290" y2="94"  stroke="#80ff60" stroke-width="3" stroke-linecap="round" opacity="0.75"/>
+  <line x1="232" y1="70"  x2="280" y2="118" stroke="#80ff60" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
+  <line x1="280" y1="70"  x2="232" y2="118" stroke="#80ff60" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
+
+  <!-- Trunk -->
+  <rect x="240" y="442" width="32" height="46" rx="2" fill="#5a3a18"/>
+  <rect x="246" y="442" width="10" height="46" rx="1" fill="#7a4e28"/>
+
+  <!-- Fireflies scattered in canopy -->
+  <circle cx="128" cy="308" r="5" fill="#5cd860" opacity="0.80"/>
+  <circle cx="96"  cy="390" r="4" fill="#5cd860" opacity="0.60"/>
+  <circle cx="158" cy="228" r="4" fill="#80ff60" opacity="0.55"/>
+  <circle cx="394" cy="290" r="5" fill="#5cd860" opacity="0.70"/>
+  <circle cx="422" cy="370" r="3" fill="#80ff60" opacity="0.50"/>
+  <circle cx="342" cy="178" r="3" fill="#5cd860" opacity="0.45"/>
+  <circle cx="162" cy="428" r="3" fill="#5cd860" opacity="0.55"/>
+  <circle cx="356" cy="424" r="4" fill="#5cd860" opacity="0.60"/>
+
+  <!-- Diamond sparkles (pixel-art style) at corners -->
+  <polygon points="88,136  94,148  88,160  82,148"  fill="#5cd860" opacity="0.45"/>
+  <polygon points="428,188 434,200 428,212 422,200" fill="#5cd860" opacity="0.38"/>
+  <polygon points="70,220  74,230  70,240  66,230"  fill="#80ff60" opacity="0.30"/>
+  <polygon points="446,130 450,140 446,150 442,140" fill="#80ff60" opacity="0.28"/>
+</svg>

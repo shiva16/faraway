@@ -2,8 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Faraway — Forest Restoration</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/faraway/manifest.json" />
+  <meta name="theme-color" content="#1e4018" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Faraway" />
+  <link rel="apple-touch-icon" href="/faraway/apple-touch-icon.png" />
+  <link rel="icon" type="image/svg+xml" href="/faraway/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/faraway/favicon-32.png" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
@@ -182,6 +194,118 @@
       color: #3a6830;
       letter-spacing: 0.05em;
     }
+
+    /* ── Responsive login card ── */
+    @media (max-width: 420px) {
+      .login-card { width: calc(100vw - 24px); padding: 22px 18px 18px; }
+      .login-title h1 { font-size: 1.6rem; }
+    }
+
+    /* ── Portrait rotation prompt ── */
+    #rotate-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #060d06;
+      color: #5cd860;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 20px;
+      font-family: 'Space Mono', monospace;
+      text-align: center;
+      padding: 32px;
+    }
+    #rotate-overlay .rotate-icon { font-size: 3.5rem; animation: spin 2s ease-in-out infinite alternate; }
+    #rotate-overlay p { font-size: 0.85rem; color: #3a8830; letter-spacing: 0.08em; line-height: 1.8; }
+    @keyframes spin { from { transform: rotate(-15deg); } to { transform: rotate(15deg); } }
+    @media (max-width: 900px) and (orientation: portrait) {
+      #rotate-overlay { display: flex; }
+    }
+
+    /* ── Mobile game controls ── */
+    #mobile-controls {
+      display: none;
+      position: fixed;
+      bottom: env(safe-area-inset-bottom, 0);
+      left: 0;
+      right: 0;
+      height: 156px;
+      pointer-events: none;
+      z-index: 50;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #mobile-controls.active { display: block; }
+
+    /* D-pad */
+    #dpad {
+      position: absolute;
+      left: 14px;
+      bottom: 10px;
+      width: 144px;
+      height: 144px;
+      display: grid;
+      grid-template-columns: 48px 48px 48px;
+      grid-template-rows: 48px 48px 48px;
+      pointer-events: all;
+    }
+    .dpad-btn {
+      background: rgba(18, 50, 14, 0.62);
+      border: 1px solid rgba(92, 216, 96, 0.28);
+      color: #5cd860;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.07s;
+    }
+    .dpad-btn:active, .dpad-btn.held { background: rgba(40, 110, 30, 0.78); }
+    #dpad-up    { grid-column: 2; grid-row: 1; border-radius: 6px 6px 0 0; }
+    #dpad-left  { grid-column: 1; grid-row: 2; border-radius: 6px 0 0 6px; }
+    #dpad-center{ grid-column: 2; grid-row: 2; background: rgba(8,20,6,0.4); border-color: transparent; }
+    #dpad-right { grid-column: 3; grid-row: 2; border-radius: 0 6px 6px 0; }
+    #dpad-down  { grid-column: 2; grid-row: 3; border-radius: 0 0 6px 6px; }
+
+    /* Action buttons */
+    #action-btns {
+      position: absolute;
+      right: 14px;
+      bottom: 10px;
+      display: grid;
+      grid-template-columns: 56px 56px;
+      grid-template-rows: 44px 44px 44px;
+      gap: 6px;
+      pointer-events: all;
+    }
+    .act-btn {
+      background: rgba(18, 50, 14, 0.62);
+      border: 1px solid rgba(92, 216, 96, 0.28);
+      color: #9ad870;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      touch-action: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.07s;
+      text-align: center;
+      padding: 2px;
+      line-height: 1.3;
+    }
+    .act-btn:active { background: rgba(40,110,30,0.78); color: #c8f080; }
+    .act-btn.wide { grid-column: span 2; }
+    #btn-e      { color: #ffd870; border-color: rgba(255,210,80,0.4); }
+    #btn-attack { color: #ff8060; border-color: rgba(255,100,60,0.35); }
+    #btn-esc    { color: #8090b0; border-color: rgba(100,120,180,0.3); font-size: 9px; }
   </style>
 </head>
 <body>
@@ -230,6 +354,32 @@
         Token saves your progress to <code>shiva16/faraway</code>.<br>
         Only the forest remembers what you plant here.
       </p>
+    </div>
+  </div>
+
+  <!-- Portrait rotation overlay -->
+  <div id="rotate-overlay">
+    <div class="rotate-icon">📱</div>
+    <p>FARAWAY works best in landscape.<br>Please rotate your device.</p>
+  </div>
+
+  <!-- Mobile game controls (shown only on touch devices) -->
+  <div id="mobile-controls">
+    <div id="dpad">
+      <button class="dpad-btn" id="dpad-up"    aria-label="Up">▲</button>
+      <button class="dpad-btn" id="dpad-left"  aria-label="Left">◀</button>
+      <div    class="dpad-btn" id="dpad-center"></div>
+      <button class="dpad-btn" id="dpad-right" aria-label="Right">▶</button>
+      <button class="dpad-btn" id="dpad-down"  aria-label="Down">▼</button>
+    </div>
+
+    <div id="action-btns">
+      <button class="act-btn" id="btn-e"      aria-label="Interact">[ E ]<br>Act</button>
+      <button class="act-btn" id="btn-attack" aria-label="Attack">[ ⚔ ]<br>Attack</button>
+      <button class="act-btn" id="btn-build"  aria-label="Build">[ B ]<br>Build</button>
+      <button class="act-btn" id="btn-plant"  aria-label="Plant">[ P ]<br>Plant</button>
+      <button class="act-btn" id="btn-inv"    aria-label="Inventory">[ I ]<br>Inv</button>
+      <button class="act-btn" id="btn-esc"    aria-label="Close">[ Esc ]<br>Close</button>
     </div>
   </div>
 

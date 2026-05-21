@@ -252,7 +252,6 @@ export interface SaveState {
   equippedItem: ItemKind | null;
   season: Season;
   seasonTimer: number;   // real seconds remaining in current season
-  explored: number[];    // run-length encoded fog-of-war
   respawnX: number;
   respawnY: number;
   enemyCampHp: number;
@@ -289,7 +288,6 @@ export function defaultSave(): SaveState {
     equippedItem: null,
     season: 'summer',
     seasonTimer: 120,
-    explored: [],
     respawnX: 24,
     respawnY: 30,
     enemyCampHp: 400,
