@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "px": 21.64776064786987,
-  "py": 27.01427408518426,
-  "dir": "left",
+  "px": 33.96254361127779,
+  "py": 17.215316736654213,
+  "dir": "right",
   "discoveries": [
     "old_fire",
     "hilltop_view",
@@ -22,17 +22,25 @@
     "used_daily_0": true,
     "used_note_shore": true,
     "used_daily_2": true,
-    "used_daily_1": true
+    "used_daily_1": true,
+    "dep_w6": 1779334576961,
+    "dep_w3": 1779334579928,
+    "dep_w2": 1779334541828,
+    "dep_c2": 1779334609063,
+    "dep_c1": 1779334611212,
+    "dep_c3": 1779334602545,
+    "dep_c0": 1779334616562,
+    "dep_w7": 1779334575078
   },
-  "playTime": 2055.0176999992386,
-  "lastSaved": "2026-05-21T03:34:34.960Z",
+  "playTime": 2175.0343999995084,
+  "lastSaved": "2026-05-21T03:36:34.962Z",
   "collectedRunes": [],
   "essence": 100,
   "resources": {
-    "wood": 0,
+    "wood": 39,
     "stone": 0,
     "food": 0,
-    "coin": 0
+    "coin": 14
   },
   "buildings": [],
   "era": 1,
