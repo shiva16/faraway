@@ -32,8 +32,8 @@
     "dep_c0": 1779334616562,
     "dep_w7": 1779334575078
   },
-  "playTime": 2535.0678000002786,
-  "lastSaved": "2026-05-21T03:42:34.997Z",
+  "playTime": 2538.057600000262,
+  "lastSaved": "2026-05-21T03:51:43.541Z",
   "collectedRunes": [],
   "essence": 100,
   "resources": {
@@ -44,5 +44,19 @@
   },
   "buildings": [],
   "era": 1,
-  "shipParts": []
+  "shipParts": [],
+  "hp": 100,
+  "hunger": 97.90714000001698,
+  "sanity": 100,
+  "researched": [],
+  "inventory": [],
+  "equippedItem": null,
+  "season": "summer",
+  "seasonTimer": 117.01020000002401,
+  "explored": [],
+  "respawnX": 33.96254361127779,
+  "respawnY": 17.215316736654213,
+  "enemyCampHp": 400,
+  "raidLevel": 1,
+  "dayCount": 0
 }
