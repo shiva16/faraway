@@ -7,14 +7,14 @@ export const enum T {
   SAND         = 3,
   GRASS_LIGHT  = 4,
   GRASS        = 5,
-  FOREST_EDGE  = 6,  // passable, dim
-  FOREST       = 7,  // impassable
+  FOREST_EDGE  = 6,
+  FOREST       = 7,
   PATH         = 8,
-  RUIN_WALL    = 9,  // impassable
+  RUIN_WALL    = 9,
   RUIN_FLOOR   = 10,
-  CAVE_WALL    = 11, // impassable
+  CAVE_WALL    = 11,
   CAVE_FLOOR   = 12,
-  SHALLOW_DARK = 13, // cave water
+  SHALLOW_DARK = 13,
 }
 
 export interface TileDef {
@@ -77,11 +77,10 @@ export interface Entity {
   y: number;
   vx: number;
   vy: number;
-  phase: number;     // wander/animation offset
+  phase: number;
   state: 'idle' | 'wander' | 'flee' | 'hunt' | 'lead';
   stateTimer: number;
   alive: boolean;
-  // bird flock index
   flock?: number;
 }
 
@@ -91,13 +90,48 @@ export type RuneKind = 'fire' | 'water' | 'earth' | 'wind';
 
 export interface ActiveSpell {
   kind: RuneKind;
-  timer: number;     // frames remaining
-  // fire orb position
+  timer: number;
   ox?: number;
   oy?: number;
   ovx?: number;
   ovy?: number;
 }
+
+// ── Resources ─────────────────────────────────────────────────────────────────
+
+export type ResourceKind = 'wood' | 'stone' | 'food' | 'coin';
+
+export interface Resources {
+  wood: number;
+  stone: number;
+  food: number;
+  coin: number;
+}
+
+export interface ResourceNode {
+  id: string;
+  kind: ResourceKind;
+  tx: number;
+  ty: number;
+  yield: number;        // amount per gather
+  respawnSecs: number;  // real seconds until restock
+  label: string;        // gather prompt verb
+}
+
+// ── Buildings ─────────────────────────────────────────────────────────────────
+
+export type BuildingKind = 'shelter' | 'workshop' | 'forge' | 'signal_fire' | 'dock';
+
+export interface PlacedBuilding {
+  id: string;
+  kind: BuildingKind;
+  tx: number;
+  ty: number;
+}
+
+// ── Era ───────────────────────────────────────────────────────────────────────
+
+export type Era = 1 | 2 | 3;
 
 // ── Save state ────────────────────────────────────────────────────────────────
 
@@ -107,16 +141,21 @@ export interface SaveState {
   py: number;
   dir: Dir;
   discoveries: string[];
-  flags: Record<string, boolean>;
+  flags: Record<string, boolean | number>;   // supports timestamps too
   playTime: number;
   lastSaved: string;
   collectedRunes: RuneKind[];
   essence: number;
+  // v3 additions
+  resources: Resources;
+  buildings: PlacedBuilding[];
+  era: Era;
+  shipParts: string[];   // 'hull' | 'sail' | 'compass'
 }
 
 export function defaultSave(): SaveState {
   return {
-    version: 2,
+    version: 3,
     px: 24,
     py: 30,
     dir: 'up',
@@ -126,5 +165,9 @@ export function defaultSave(): SaveState {
     lastSaved: new Date().toISOString(),
     collectedRunes: [],
     essence: 100,
+    resources: { wood: 0, stone: 0, food: 0, coin: 0 },
+    buildings: [],
+    era: 1,
+    shipParts: [],
   };
 }

@@ -1,5 +1,5 @@
 import { T, WORLD_W, WORLD_H } from './types';
-import type { TileDef, Player, Interactable, SaveState, Entity, RuneKind, ActiveSpell } from './types';
+import type { TileDef, Player, Interactable, SaveState, Entity, RuneKind, ActiveSpell, BuildingKind, ResourceKind } from './types';
 import {
   TILE_DEFS, buildWorld, INTERACTABLES, DISCOVERIES,
   outerTile, getDailyNotes, getDailyAtmosphere,
@@ -7,6 +7,10 @@ import {
   RUNES, RUNE_DISCOVERIES, spawnEntities,
 } from './world';
 import type { Atmosphere } from './world';
+import {
+  BUILDING_DEFS, RESOURCE_NODES, SHIP_PARTS,
+  canAfford, deductCost, resourceColor, resourceIcon,
+} from './building';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -90,6 +94,28 @@ let whaleY              = 0;
 
 // ── Ghost ship ────────────────────────────────────────────────────────────────
 let ghostShipX  = -8.0;   // tile X (starts off-screen left)
+
+// ── Build mode ────────────────────────────────────────────────────────────────
+let buildMode           = false;
+let selectedBuildKind: BuildingKind | null = null;
+let mouseScreenX        = 0;
+let mouseScreenY        = 0;
+let bJustPressed        = false;
+
+// ── Gathering animation ───────────────────────────────────────────────────────
+let gatherFlash: { kind: ResourceKind; amount: number; sx: number; sy: number; timer: number } | null = null;
+
+// ── Era banner ────────────────────────────────────────────────────────────────
+let eraBannerText   = '';
+let eraBannerTimer  = 0;
+
+// ── Escape / victory ──────────────────────────────────────────────────────────
+let escapePhase     = 0;   // 0=none 1=fade 2=victory
+let escapeFade      = 0;   // 0-1
+let shipCraftMenuOpen = false;
+
+// ── Dock craft panel ──────────────────────────────────────────────────────────
+let nearDock        = false;
 
 // Rain particles (screen-space, animated by wavePhase)
 const RAINDROPS = Array.from({ length: 200 }, (_, i) => ({
@@ -354,6 +380,527 @@ function drawPlayer() {
     ctx.fillRect(cx - 4 * s, legY, 3 * s, 3 * s);
     ctx.fillRect(cx + s,     legY + (bob > 0 ? s : -s), 3 * s, 3 * s);
   }
+}
+
+// ── Resource node rendering ──────────────────────────────────────────────────
+
+function drawResourceNodes() {
+  for (const node of RESOURCE_NODES) {
+    const depleted = (save.flags[`dep_${node.id}`] as number | boolean | undefined);
+    if (depleted === true) continue;  // legacy bool
+    const depletedUntil = typeof depleted === 'number' ? depleted : 0;
+    const isDepleted = depletedUntil > Date.now();
+
+    const { sx, sy } = worldToScreen(node.tx, node.ty);
+    if (sx < -TILE_PX || sx > canvas.width + TILE_PX) continue;
+    const cx = sx + TILE_PX / 2;
+    const cy = sy + TILE_PX / 2;
+    const s  = SCALE;
+
+    if (isDepleted) {
+      // Faded stump/empty rock
+      ctx.globalAlpha = 0.3;
+    }
+
+    if (node.kind === 'wood') {
+      // Tree
+      ctx.fillStyle = isDepleted ? '#4a3820' : '#2a5c18';
+      ctx.beginPath();
+      ctx.arc(cx, cy - 4 * s, 6 * s, 0, Math.PI * 2);
+      ctx.fill();
+      if (!isDepleted) {
+        ctx.fillStyle = '#1e4510';
+        ctx.beginPath();
+        ctx.arc(cx - s, cy - 5 * s, 4 * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = isDepleted ? '#3a2810' : '#5a3818';
+      ctx.fillRect(cx - s * 1.5, cy + s, s * 3, 5 * s);
+
+    } else if (node.kind === 'stone') {
+      // Rock cluster
+      ctx.fillStyle = isDepleted ? '#4a4848' : '#7a7070';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 6 * s, 4 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (!isDepleted) {
+        ctx.fillStyle = '#5a5858';
+        ctx.beginPath();
+        ctx.ellipse(cx - 2 * s, cy - s, 3 * s, 2.5 * s, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+        // Sparkle
+        ctx.fillStyle = '#c8c8d8';
+        ctx.fillRect(cx + 2 * s, cy - 2 * s, s, s);
+      }
+
+    } else if (node.kind === 'food') {
+      // Fishing spot — water shimmer + fish silhouette
+      if (!isDepleted) {
+        const shimmer = Math.sin(wavePhase * 3 + node.tx * 0.5) * 0.5 + 0.5;
+        ctx.fillStyle = `rgba(60,180,220,${0.3 + shimmer * 0.3})`;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 7 * s, 4 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Fish shape
+        ctx.fillStyle = '#204878';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 4 * s, 2 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx - 3 * s, cy);
+        ctx.lineTo(cx - 6 * s, cy - 2 * s);
+        ctx.lineTo(cx - 6 * s, cy + 2 * s);
+        ctx.fill();
+      }
+
+    } else if (node.kind === 'coin') {
+      // Artifact/coin pile
+      if (!isDepleted) {
+        ctx.fillStyle = '#806020';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + s, 5 * s, 2 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Glint
+        const glint = Math.sin(wavePhase * 4 + node.tx) * 0.5 + 0.5;
+        ctx.fillStyle = `rgba(255,220,60,${0.5 + glint * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(cx + s, cy - s, 2 * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.globalAlpha = 1;
+
+    // Gather prompt when nearby
+    const dx = player.x - node.tx, dy = player.y - node.ty;
+    if (!isDepleted && Math.sqrt(dx * dx + dy * dy) < 1.8) {
+      const yieldBonus = save.buildings.some(b => b.kind === 'forge') ? ' (+50%)' : '';
+      const prompt = `[ E ] ${node.label}${yieldBonus}`;
+      const pw = prompt.length * 8 + 24;
+      const px2 = canvas.width / 2 - pw / 2;
+      const py2 = canvas.height - 54;
+      ctx.fillStyle   = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(px2, py2, pw, 28);
+      const col = resourceColor(node.kind);
+      ctx.strokeStyle = col;
+      ctx.lineWidth   = 1;
+      ctx.strokeRect(px2, py2, pw, 28);
+      ctx.fillStyle   = '#d4c890';
+      ctx.font        = '12px "Courier New", monospace';
+      ctx.textAlign   = 'center';
+      ctx.fillText(prompt, canvas.width / 2, py2 + 18);
+      ctx.textAlign   = 'left';
+    }
+  }
+}
+
+// ── Building rendering ────────────────────────────────────────────────────────
+
+function drawBuildings() {
+  for (const b of save.buildings) {
+    const { sx, sy } = worldToScreen(b.tx, b.ty);
+    if (sx < -TILE_PX * 2 || sx > canvas.width + TILE_PX * 2) continue;
+    const cx = sx + TILE_PX / 2;
+    const cy = sy + TILE_PX / 2;
+    const s  = SCALE;
+    drawBuildingSprite(b.kind, cx, cy, s, false);
+  }
+}
+
+function drawBuildingSprite(kind: BuildingKind, cx: number, cy: number, s: number, ghost: boolean) {
+  ctx.globalAlpha = ghost ? 0.55 : 1.0;
+  switch (kind) {
+    case 'shelter': {
+      // Simple hut
+      ctx.fillStyle = '#6b4828';
+      ctx.fillRect(cx - 7 * s, cy, 14 * s, 10 * s);
+      ctx.fillStyle = '#4a3018';
+      ctx.beginPath();
+      ctx.moveTo(cx - 9 * s, cy);
+      ctx.lineTo(cx, cy - 10 * s);
+      ctx.lineTo(cx + 9 * s, cy);
+      ctx.fill();
+      ctx.fillStyle = '#2a1808';
+      ctx.fillRect(cx - 2 * s, cy + 3 * s, 4 * s, 7 * s);
+      break;
+    }
+    case 'workshop': {
+      // Larger building with chimney hint
+      ctx.fillStyle = '#5a4830';
+      ctx.fillRect(cx - 9 * s, cy - 2 * s, 18 * s, 13 * s);
+      ctx.fillStyle = '#3a3020';
+      ctx.beginPath();
+      ctx.moveTo(cx - 10 * s, cy - 2 * s);
+      ctx.lineTo(cx, cy - 13 * s);
+      ctx.lineTo(cx + 10 * s, cy - 2 * s);
+      ctx.fill();
+      ctx.fillStyle = '#2a2010';
+      ctx.fillRect(cx - 3 * s, cy + 2 * s, 6 * s, 9 * s);
+      // Chimney
+      ctx.fillStyle = '#4a4030';
+      ctx.fillRect(cx + 4 * s, cy - 15 * s, 3 * s, 6 * s);
+      break;
+    }
+    case 'forge': {
+      // Stone structure with orange glow
+      ctx.fillStyle = '#4a4038';
+      ctx.fillRect(cx - 8 * s, cy - s, 16 * s, 11 * s);
+      ctx.fillStyle = '#2a2828';
+      ctx.beginPath();
+      ctx.moveTo(cx - 9 * s, cy - s);
+      ctx.lineTo(cx, cy - 10 * s);
+      ctx.lineTo(cx + 9 * s, cy - s);
+      ctx.fill();
+      // Glowing forge mouth
+      const glow = Math.sin(wavePhase * 3) * 0.5 + 0.5;
+      ctx.fillStyle = `rgb(${180 + Math.floor(glow * 40)},${80 + Math.floor(glow * 30)},20)`;
+      ctx.fillRect(cx - 3 * s, cy + 2 * s, 6 * s, 5 * s);
+      break;
+    }
+    case 'signal_fire': {
+      // Tall pole with fire
+      ctx.fillStyle = '#5a4828';
+      ctx.fillRect(cx - s, cy - 10 * s, 2 * s, 18 * s);
+      ctx.fillRect(cx - 6 * s, cy + 4 * s, 12 * s, 2 * s);
+      const flicker = Math.sin(wavePhase * 5) * 0.5 + 0.5;
+      ctx.fillStyle = `rgb(${200 + Math.floor(flicker * 55)},${60 + Math.floor(flicker * 60)},10)`;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - 12 * s, 4 * s, 6 * s + flicker * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Orange halo
+      const grad = ctx.createRadialGradient(cx, cy - 12 * s, 0, cx, cy - 12 * s, 14 * s);
+      grad.addColorStop(0, `rgba(255,120,0,${0.3 * flicker})`);
+      grad.addColorStop(1, 'rgba(255,120,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy - 12 * s, 14 * s, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'dock': {
+      // Pier extending downward
+      ctx.fillStyle = '#6b5030';
+      ctx.fillRect(cx - 12 * s, cy - 2 * s, 24 * s, 6 * s);
+      // Pier posts
+      for (let i = -2; i <= 2; i++) {
+        ctx.fillStyle = '#4a3820';
+        ctx.fillRect(cx + i * 5 * s - s, cy + 4 * s, 2 * s, 8 * s);
+      }
+      // Platform
+      ctx.fillStyle = '#7a6040';
+      ctx.fillRect(cx - 10 * s, cy - 4 * s, 20 * s, 3 * s);
+      // If ship parts assembled, show small boat
+      if (save.shipParts.length === 3) {
+        ctx.fillStyle = '#4a3818';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + 10 * s, 8 * s, 3 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#c8c8a0';
+        ctx.fillRect(cx - s, cy + 3 * s, 2 * s, 8 * s);
+        ctx.beginPath();
+        ctx.moveTo(cx - s, cy + 3 * s);
+        ctx.lineTo(cx + 7 * s, cy + 7 * s);
+        ctx.lineTo(cx - s, cy + 11 * s);
+        ctx.fill();
+      }
+      break;
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── Build mode overlay ────────────────────────────────────────────────────────
+
+function drawBuildMode() {
+  if (!buildMode) return;
+
+  // Ghost preview at mouse position
+  if (selectedBuildKind) {
+    const tx = Math.floor(mouseScreenX / TILE_PX + player.x - canvas.width / 2 / TILE_PX);
+    const ty = Math.floor(mouseScreenY / TILE_PX + player.y - canvas.height / 2 / TILE_PX);
+    const tile = tileAt(tx, ty);
+    const def  = TILE_DEFS[tile];
+    const def2 = BUILDING_DEFS.find(d => d.kind === selectedBuildKind)!;
+    const valid = def?.passable && tile !== 0 && tile !== 1 && tile !== 2
+      && !save.buildings.some(b => b.tx === tx && b.ty === ty);
+
+    const { sx, sy } = worldToScreen(tx, ty);
+    // Tint the hovered tile
+    ctx.fillStyle = valid ? 'rgba(80,200,80,0.3)' : 'rgba(200,60,60,0.3)';
+    ctx.fillRect(sx, sy, TILE_PX * def2.size, TILE_PX * def2.size);
+    // Ghost building
+    drawBuildingSprite(selectedBuildKind, sx + TILE_PX / 2, sy + TILE_PX / 2, SCALE, true);
+    // Grid outline
+    ctx.strokeStyle = valid ? 'rgba(80,200,80,0.7)' : 'rgba(200,60,60,0.7)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx, sy, TILE_PX * def2.size, TILE_PX * def2.size);
+  }
+
+  // Bottom build panel
+  const PANEL_H = 80, PAD = 12;
+  ctx.fillStyle = 'rgba(6,4,1,0.92)';
+  ctx.fillRect(0, canvas.height - PANEL_H, canvas.width, PANEL_H);
+  ctx.strokeStyle = '#5a4828';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, canvas.height - PANEL_H, canvas.width, PANEL_H);
+
+  ctx.fillStyle = '#7a6030';
+  ctx.font      = '10px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('BUILD MODE  —  Click to place · Esc to cancel · B to close', canvas.width / 2, canvas.height - PANEL_H + 14);
+  ctx.textAlign = 'left';
+
+  const SLOT_W = 130;
+  const totalW = BUILDING_DEFS.length * SLOT_W + (BUILDING_DEFS.length - 1) * PAD;
+  let ix = (canvas.width - totalW) / 2;
+  const iy = canvas.height - PANEL_H + 20;
+
+  for (const def of BUILDING_DEFS) {
+    const affordable = canAfford(save.resources, def.cost);
+    const alreadyBuilt = def.unique && save.buildings.some(b => b.kind === def.kind);
+    const active = selectedBuildKind === def.kind;
+
+    ctx.fillStyle = alreadyBuilt
+      ? 'rgba(30,30,20,0.6)'
+      : active
+        ? 'rgba(100,80,20,0.8)'
+        : affordable
+          ? 'rgba(40,30,10,0.8)'
+          : 'rgba(20,18,10,0.5)';
+    ctx.fillRect(ix, iy, SLOT_W, 52);
+    ctx.strokeStyle = active ? '#c8a020' : alreadyBuilt ? '#333' : affordable ? '#6a5020' : '#302818';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(ix, iy, SLOT_W, 52);
+
+    ctx.fillStyle = alreadyBuilt ? '#444' : affordable ? '#d4c890' : '#604830';
+    ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.fillText(def.label, ix + 8, iy + 16);
+
+    if (alreadyBuilt) {
+      ctx.fillStyle = '#555';
+      ctx.font = '9px "Courier New", monospace';
+      ctx.fillText('already built', ix + 8, iy + 30);
+    } else {
+      const costParts: string[] = [];
+      if (def.cost.wood  > 0) costParts.push(`${def.cost.wood}W`);
+      if (def.cost.stone > 0) costParts.push(`${def.cost.stone}S`);
+      if (def.cost.food  > 0) costParts.push(`${def.cost.food}F`);
+      if (def.cost.coin  > 0) costParts.push(`${def.cost.coin}C`);
+      ctx.fillStyle = affordable ? '#a08838' : '#603828';
+      ctx.font = '9px "Courier New", monospace';
+      ctx.fillText(costParts.join(' · '), ix + 8, iy + 30);
+    }
+
+    ix += SLOT_W + PAD;
+  }
+}
+
+// ── Ship craft panel ──────────────────────────────────────────────────────────
+
+function drawShipCraftPanel() {
+  if (!shipCraftMenuOpen) return;
+
+  const W = 340, H = 240, PAD = 16;
+  const X = (canvas.width - W) / 2;
+  const Y = (canvas.height - H) / 2;
+
+  ctx.fillStyle   = 'rgba(6,4,1,0.96)';
+  ctx.fillRect(X, Y, W, H);
+  ctx.strokeStyle = '#4a6888';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(X, Y, W, H);
+
+  ctx.fillStyle  = '#80aad0';
+  ctx.font       = 'bold 13px "Courier New", monospace';
+  ctx.textAlign  = 'center';
+  ctx.fillText('DOCK  —  BUILD YOUR SHIP', X + W / 2, Y + PAD + 12);
+  ctx.textAlign  = 'left';
+
+  let ry = Y + PAD + 30;
+  for (const part of SHIP_PARTS) {
+    const done = save.shipParts.includes(part.id);
+    ctx.fillStyle = done ? 'rgba(20,40,20,0.8)' : 'rgba(20,20,30,0.8)';
+    ctx.fillRect(X + PAD, ry, W - PAD * 2, 46);
+    ctx.strokeStyle = done ? '#40a840' : '#304860';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(X + PAD, ry, W - PAD * 2, 46);
+
+    ctx.fillStyle = done ? '#60c860' : '#c8d4e0';
+    ctx.font = 'bold 11px "Courier New", monospace';
+    ctx.fillText((done ? '✓  ' : '   ') + part.label, X + PAD + 10, ry + 16);
+    ctx.fillStyle = done ? '#408840' : '#607888';
+    ctx.font = '9px "Courier New", monospace';
+    ctx.fillText(part.desc, X + PAD + 10, ry + 29);
+
+    if (!done) {
+      const affordable = canAfford(save.resources, part.cost);
+      ctx.fillStyle = affordable ? '#a0c820' : '#604030';
+      ctx.font = '10px "Courier New", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(affordable ? '[ E ] craft' : 'need resources', X + W - PAD - 8, ry + 22);
+      ctx.textAlign = 'left';
+    }
+    ry += 54;
+  }
+
+  if (save.shipParts.length === SHIP_PARTS.length) {
+    ctx.fillStyle = '#c8a020';
+    ctx.font = 'bold 12px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[ E ] SET SAIL — leave the island', X + W / 2, Y + H - 16);
+    ctx.textAlign = 'left';
+  } else {
+    ctx.fillStyle = '#405060';
+    ctx.font = '10px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[ Esc ] close', X + W / 2, Y + H - 16);
+    ctx.textAlign = 'left';
+  }
+}
+
+// ── Victory screen ────────────────────────────────────────────────────────────
+
+function drawVictory() {
+  if (escapePhase === 0) return;
+
+  if (escapePhase === 1) {
+    // Fade to black
+    ctx.fillStyle = `rgba(0,0,0,${escapeFade})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  // Victory screen
+  ctx.fillStyle = '#020408';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Stars
+  drawStars();
+
+  const W = 420, H = 300;
+  const X = (canvas.width - W) / 2;
+  const Y = (canvas.height - H) / 2;
+
+  ctx.fillStyle   = 'rgba(5,12,25,0.95)';
+  ctx.fillRect(X, Y, W, H);
+  ctx.strokeStyle = '#4060a0';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(X, Y, W, H);
+
+  ctx.fillStyle = '#80c0ff';
+  ctx.font = 'bold 18px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('You escaped Faraway.', X + W / 2, Y + 50);
+
+  ctx.fillStyle = '#4a7090';
+  ctx.font = '11px "Courier New", monospace';
+  ctx.fillText('The sea was waiting. You were ready.', X + W / 2, Y + 72);
+
+  const mins  = Math.floor(save.playTime / 60);
+  const secs  = Math.floor(save.playTime % 60);
+  const stats: Array<[string, string]> = [
+    ['Time on the island', `${mins}m ${secs}s`],
+    ['Discoveries',        `${save.discoveries.length}`],
+    ['Runes collected',    `${save.collectedRunes.length} / 4`],
+    ['Buildings erected',  `${save.buildings.length}`],
+    ['Era reached',        save.era === 3 ? 'Ready to Sail' : save.era === 2 ? 'Settled' : 'Stranded'],
+  ];
+
+  let sy = Y + 110;
+  for (const [label, val] of stats) {
+    ctx.fillStyle = '#405870';
+    ctx.font = '11px "Courier New", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, X + 40, sy);
+    ctx.fillStyle = '#c0d8f0';
+    ctx.textAlign = 'right';
+    ctx.fillText(val, X + W - 40, sy);
+    sy += 22;
+  }
+
+  ctx.fillStyle = '#304060';
+  ctx.strokeStyle = '#405880';
+  ctx.lineWidth = 1;
+  ctx.fillRect(X + 40, Y + H - 56, 150, 30);
+  ctx.strokeRect(X + 40, Y + H - 56, 150, 30);
+  ctx.fillStyle = '#a0c8e0';
+  ctx.font = '11px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[ R ] Sail back', X + 115, Y + H - 36);
+
+  ctx.fillStyle = '#203040';
+  ctx.strokeStyle = '#304860';
+  ctx.fillRect(X + W - 190, Y + H - 56, 150, 30);
+  ctx.strokeRect(X + W - 190, Y + H - 56, 150, 30);
+  ctx.fillStyle = '#607888';
+  ctx.fillText('[ N ] New island', X + W - 115, Y + H - 36);
+  ctx.textAlign = 'left';
+}
+
+// ── Era banner ────────────────────────────────────────────────────────────────
+
+function drawEraBanner() {
+  if (eraBannerTimer <= 0) return;
+  const alpha = Math.min(1, eraBannerTimer / 40) * Math.min(1, (eraBannerTimer - 20) / 20 + 1);
+  const clampedAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.globalAlpha = clampedAlpha;
+  ctx.fillStyle   = 'rgba(0,0,0,0.75)';
+  const tw = eraBannerText.length * 10 + 40;
+  ctx.fillRect(canvas.width / 2 - tw / 2, canvas.height / 2 - 30, tw, 40);
+  ctx.strokeStyle = '#c8a020';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(canvas.width / 2 - tw / 2, canvas.height / 2 - 30, tw, 40);
+  ctx.fillStyle   = '#d4a853';
+  ctx.font        = 'bold 16px "Courier New", monospace';
+  ctx.textAlign   = 'center';
+  ctx.fillText(eraBannerText, canvas.width / 2, canvas.height / 2 - 5);
+  ctx.globalAlpha = 1;
+  ctx.textAlign   = 'left';
+}
+
+// ── Gather flash ──────────────────────────────────────────────────────────────
+
+function drawGatherFlash() {
+  if (!gatherFlash) return;
+  const { kind, amount, sx, sy, timer } = gatherFlash;
+  const alpha = timer / 60;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle   = resourceColor(kind);
+  ctx.font        = 'bold 14px "Courier New", monospace';
+  ctx.textAlign   = 'center';
+  ctx.fillText(`+${amount} ${resourceIcon(kind)}`, sx, sy - (1 - alpha) * 20);
+  ctx.globalAlpha = 1;
+  ctx.textAlign   = 'left';
+}
+
+// ── Resource HUD ──────────────────────────────────────────────────────────────
+
+function drawResourceHUD() {
+  const kinds: Array<ResourceKind> = ['wood', 'stone', 'food', 'coin'];
+  const labels = ['W', 'S', 'F', 'C'];
+  const W = 48, H = 22, PAD = 4;
+  const startX = 14;
+  const startY = 46;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(startX, startY, kinds.length * (W + PAD) - PAD, H);
+
+  kinds.forEach((kind, i) => {
+    const x = startX + i * (W + PAD);
+    const val = save.resources[kind];
+    ctx.fillStyle = resourceColor(kind);
+    ctx.font = 'bold 10px "Courier New", monospace';
+    ctx.fillText(`${labels[i]}:${val}`, x + 4, startY + 15);
+  });
+
+  // Era indicator
+  const eraLabels = ['', 'Stranded', 'Settled', 'Ready to Sail'];
+  const eraColors = ['', '#608048', '#80a840', '#40a0c8'];
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(startX, startY + H + 4, 150, 18);
+  ctx.fillStyle = eraColors[save.era];
+  ctx.font = '9px "Courier New", monospace';
+  ctx.fillText(`Era: ${eraLabels[save.era]}`, startX + 6, startY + H + 16);
 }
 
 // ── Spirit realm overlay ─────────────────────────────────────────────────────
@@ -879,10 +1426,11 @@ function drawHelp() {
     {
       heading: 'ACTIONS',
       rows: [
-        ['E',   'Interact / read / collect rune'],
+        ['E',   'Interact / gather resource / collect rune'],
+        ['B',   'Open build mode (place buildings)'],
         ['Tab', 'Open discoveries journal'],
         ['F',   'Toggle Spirit Realm'],
-        ['Esc', 'Close any panel'],
+        ['Esc', 'Close any panel / cancel build'],
       ],
     },
     {
@@ -906,12 +1454,31 @@ function drawHelp() {
       ],
     },
     {
+      heading: 'GATHERING (press E near nodes)',
+      rows: [
+        ['Trees (forest edge)',  'Wood  — needed for most buildings'],
+        ['Rocks (cave area)',    'Stone — needed for forge + dock'],
+        ['Shore/shallows',       'Food  — needed for ship sail'],
+        ['Ruins artifacts',      'Coin  — needed for forge + compass'],
+      ],
+    },
+    {
+      heading: 'ESCAPE GOAL',
+      rows: [
+        ['1. Gather resources',  'Explore and press E near nodes'],
+        ['2. Build Shelter+WS',  'Advances to Era II (Settled)'],
+        ['3. Build the Dock',    'Press B → Dock → click shore tile'],
+        ['4. Craft 3 ship parts','Press E near Dock → craft all'],
+        ['5. Set Sail',          'Leave the island. You\'re free.'],
+      ],
+    },
+    {
       heading: 'TIPS',
       rows: [
-        ['Night',         'Wolves emerge; Spirit Fox appears'],
-        ['Fog days',      'Ghost ship drifts offshore'],
-        ['Standing still','Essence slowly restores on grass/sand'],
-        ['This island',   'There\'s no way off — that\'s the idea'],
+        ['Night',          'Wolves emerge; Spirit Fox appears'],
+        ['Fog days',       'Ghost ship drifts offshore'],
+        ['Forge built',    '+50% on all resource gathering'],
+        ['Spirit mode (F)','Reveals hidden runes → spells'],
       ],
     },
   ];
@@ -1244,7 +1811,7 @@ function advanceDialog() {
 // ── Player movement ───────────────────────────────────────────────────────────
 
 function movePlayer(dt: number) {
-  if (dialogActive || discPanelOpen || helpPanelOpen) return;
+  if (dialogActive || discPanelOpen || helpPanelOpen || buildMode || escapePhase > 0) return;
 
   const up    = keys['ArrowUp']    || keys['w'] || keys['W'];
   const down  = keys['ArrowDown']  || keys['s'] || keys['S'];
@@ -1287,6 +1854,83 @@ function movePlayer(dt: number) {
   } else {
     player.frame = 0;
   }
+}
+
+// ── Resource gathering ────────────────────────────────────────────────────────
+
+function nearbyResourceNode() {
+  for (const node of RESOURCE_NODES) {
+    const depletedUntil = save.flags[`dep_${node.id}`] as number | undefined;
+    if (depletedUntil && depletedUntil > Date.now()) continue;
+    const dx = player.x - node.tx, dy = player.y - node.ty;
+    if (Math.sqrt(dx * dx + dy * dy) < 1.8) return node;
+  }
+  return null;
+}
+
+function gatherResource(nodeId: string) {
+  const node = RESOURCE_NODES.find(n => n.id === nodeId);
+  if (!node) return;
+  const forgeBonus = save.buildings.some(b => b.kind === 'forge') ? 1.5 : 1;
+  const amount = Math.round(node.yield * forgeBonus);
+  save.resources[node.kind] += amount;
+  save.flags[`dep_${node.id}`] = Date.now() + node.respawnSecs * 1000;
+
+  // Floating text
+  const { sx, sy } = worldToScreen(node.tx, node.ty);
+  gatherFlash = { kind: node.kind, amount, sx, sy, timer: 60 };
+}
+
+// ── Building placement ────────────────────────────────────────────────────────
+
+function placeBuilding(kind: BuildingKind, tx: number, ty: number) {
+  const def = BUILDING_DEFS.find(d => d.kind === kind);
+  if (!def) return;
+  if (!canAfford(save.resources, def.cost)) return;
+  if (def.unique && save.buildings.some(b => b.kind === kind)) return;
+  const tile = tileAt(tx, ty);
+  const tileDef = TILE_DEFS[tile];
+  if (!tileDef?.passable || tile === 0 || tile === 1 || tile === 2) return;
+  if (save.buildings.some(b => b.tx === tx && b.ty === ty)) return;
+
+  deductCost(save.resources, def.cost);
+  save.buildings.push({ id: `${kind}_${Date.now()}`, kind, tx, ty });
+  checkEraAdvance();
+}
+
+function checkEraAdvance() {
+  if (save.era === 1) {
+    const hasShelter  = save.buildings.some(b => b.kind === 'shelter');
+    const hasWorkshop = save.buildings.some(b => b.kind === 'workshop');
+    if (hasShelter && hasWorkshop) {
+      save.era = 2;
+      eraBannerText  = '✦  ERA II: SETTLED  ✦';
+      eraBannerTimer = 240;
+    }
+  }
+  if (save.era === 2) {
+    if (save.shipParts.length === SHIP_PARTS.length) {
+      save.era = 3;
+      eraBannerText  = '✦  ERA III: READY TO SAIL  ✦';
+      eraBannerTimer = 240;
+    }
+  }
+}
+
+function craftShipPart(partId: string) {
+  const part = SHIP_PARTS.find(p => p.id === partId);
+  if (!part) return;
+  if (save.shipParts.includes(partId)) return;
+  if (!canAfford(save.resources, part.cost)) return;
+  deductCost(save.resources, part.cost);
+  save.shipParts.push(partId);
+  openDialog({
+    id: `craft_${partId}`,
+    tx: player.x, ty: player.y, range: 999,
+    prompt: '',
+    lines: [part.flavorText],
+  });
+  checkEraAdvance();
 }
 
 // ── Entity AI ─────────────────────────────────────────────────────────────────
@@ -1708,18 +2352,46 @@ function loop(now: number) {
     }
   }
 
+  // B key — build mode toggle
+  if (bJustPressed) {
+    bJustPressed = false;
+    buildMode = !buildMode;
+    if (!buildMode) selectedBuildKind = null;
+    dialogActive = false;
+    discPanelOpen = false;
+    helpPanelOpen = false;
+    shipCraftMenuOpen = false;
+  }
+
   // E key interaction
   if (eJustPressed) {
     eJustPressed = false;
     if (dialogActive) {
       if (!dialogJustOpened) advanceDialog();
       dialogJustOpened = false;
-    } else if (!discPanelOpen) {
+    } else if (shipCraftMenuOpen) {
+      // Craft next uncrafted ship part (if affordable)
+      if (save.shipParts.length === SHIP_PARTS.length) {
+        // All parts done — set sail
+        escapePhase = 1;
+        shipCraftMenuOpen = false;
+      } else {
+        const next = SHIP_PARTS.find(p => !save.shipParts.includes(p.id));
+        if (next && canAfford(save.resources, next.cost)) craftShipPart(next.id);
+      }
+    } else if (!discPanelOpen && !buildMode) {
       initAudio();
-      // Rune collection takes priority in spirit mode
+      // Priority: rune → resource node → dock → interactable
       const runeCollected = collectNearbyRune();
-      if (!runeCollected && nearbyInteractable) {
-        openDialog(nearbyInteractable);
+      if (!runeCollected) {
+        const node = nearbyResourceNode();
+        if (node) {
+          gatherResource(node.id);
+        } else if (nearDock) {
+          shipCraftMenuOpen = true;
+        } else if (nearbyInteractable) {
+          openDialog(nearbyInteractable);
+        }
       }
     }
   }
@@ -1728,6 +2400,33 @@ function loop(now: number) {
   if (spellKeyPress) {
     castSpell(spellKeyPress);
     spellKeyPress = null;
+  }
+
+  // Check near dock
+  nearDock = save.buildings.some(b => {
+    if (b.kind !== 'dock') return false;
+    const dx = player.x - b.tx, dy = player.y - b.ty;
+    return Math.sqrt(dx * dx + dy * dy) < 2.5;
+  });
+
+  // Era banner tick
+  if (eraBannerTimer > 0) eraBannerTimer--;
+
+  // Gather flash tick
+  if (gatherFlash) {
+    gatherFlash.timer--;
+    if (gatherFlash.timer <= 0) gatherFlash = null;
+  }
+
+  // Escape animation
+  if (escapePhase === 1) {
+    escapeFade = Math.min(1, escapeFade + 0.015);
+    if (escapeFade >= 1) escapePhase = 2;
+  }
+  if (escapePhase === 2) {
+    // Handle R/N keys on victory screen
+    if (keys['r'] || keys['R']) { escapePhase = 0; escapeFade = 0; }
+    if (keys['n'] || keys['N']) { save = { ...save, buildings: [], resources: { wood: 0, stone: 0, food: 0, coin: 0 }, era: 1, shipParts: [] }; escapePhase = 0; escapeFade = 0; }
   }
 
   // Entity + spell + weather updates
@@ -1800,14 +2499,22 @@ function loop(now: number) {
     }
   }
 
+  drawResourceNodes();
+  drawBuildings();
   drawZoneBanner();
+  drawEraBanner();
   drawInteractPrompt();
   drawDialog();
+  drawShipCraftPanel();
   drawDiscoveries();
   drawHelp();
+  drawBuildMode();
+  drawGatherFlash();
   drawHUD();
+  drawResourceHUD();
   drawSpiritHUD();
   drawEssenceBar();
+  drawVictory();
 }
 
 // ── Save trigger ──────────────────────────────────────────────────────────────
@@ -1840,6 +2547,10 @@ export function startGame(
   // Migrate older saves missing new fields
   if (save.collectedRunes === undefined) save.collectedRunes = [];
   if (save.essence        === undefined) save.essence        = ESSENCE_MAX;
+  if (save.resources      === undefined) save.resources      = { wood: 0, stone: 0, food: 0, coin: 0 };
+  if (save.buildings      === undefined) save.buildings      = [];
+  if (save.era            === undefined) save.era            = 1;
+  if (save.shipParts      === undefined) save.shipParts      = [];
   saveSha    = sha;
   onSave     = saveCallback;
   world      = buildWorld();
@@ -1890,17 +2601,58 @@ export function startGame(
     if (e.key === '4') spellKeyPress = 'wind';
     if (e.key === 'Tab') { e.preventDefault(); discPanelOpen = !discPanelOpen; dialogActive = false; helpPanelOpen = false; }
     if (e.key === 'h' || e.key === 'H') { hJustPressed = true; }
-    if (e.key === 'Escape') { dialogActive = false; discPanelOpen = false; helpPanelOpen = false; }
+    if (e.key === 'b' || e.key === 'B') { bJustPressed = true; }
+    if (e.key === 'Escape') {
+      dialogActive = false; discPanelOpen = false; helpPanelOpen = false;
+      buildMode = false; selectedBuildKind = null; shipCraftMenuOpen = false;
+    }
   });
   window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-  // Click the [?] button (bottom-right)
+  // Mouse tracking for build mode
+  canvas.addEventListener('mousemove', e => {
+    mouseScreenX = e.clientX;
+    mouseScreenY = e.clientY;
+  });
+
+  // Click handler: build placement + help button
   canvas.addEventListener('click', e => {
+    // [?] button
     const bx = canvas.width - 36, by = canvas.height - 58;
     if (e.clientX >= bx && e.clientX <= bx + 28 && e.clientY >= by && e.clientY <= by + 22) {
       helpPanelOpen = !helpPanelOpen;
       discPanelOpen = false;
       dialogActive  = false;
+      return;
+    }
+
+    // Build mode: select building from panel or place on world
+    if (buildMode) {
+      const PANEL_H = 80, PAD = 12, SLOT_W = 130;
+      const panelY = canvas.height - PANEL_H;
+
+      if (e.clientY >= panelY) {
+        // Clicked the panel — select a building kind
+        const totalW = BUILDING_DEFS.length * SLOT_W + (BUILDING_DEFS.length - 1) * PAD;
+        let ix = (canvas.width - totalW) / 2;
+        for (const def of BUILDING_DEFS) {
+          if (e.clientX >= ix && e.clientX <= ix + SLOT_W) {
+            const alreadyBuilt = def.unique && save.buildings.some(b => b.kind === def.kind);
+            if (!alreadyBuilt && canAfford(save.resources, def.cost)) {
+              selectedBuildKind = def.kind;
+            }
+            return;
+          }
+          ix += SLOT_W + PAD;
+        }
+      } else if (selectedBuildKind) {
+        // Clicked world — place building
+        const tx = Math.floor(e.clientX / TILE_PX + player.x - canvas.width  / 2 / TILE_PX);
+        const ty = Math.floor(e.clientY / TILE_PX + player.y - canvas.height / 2 / TILE_PX);
+        placeBuilding(selectedBuildKind, tx, ty);
+        // Keep build mode open, deselect after placing
+        selectedBuildKind = null;
+      }
     }
   });
 
