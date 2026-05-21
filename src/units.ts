@@ -174,8 +174,9 @@ export function updateUnits(
         // Keep tracking enemy position
         u.targetX = enemy.x; u.targetY = enemy.y;
 
+        const effectiveRange = u.kind === 'soldier' && save.researched.includes('archery') ? 4.0 : ATTACK_RANGE;
         const dist = dist2(u, enemy);
-        if (dist > ATTACK_RANGE) {
+        if (dist > effectiveRange) {
           moveToward(u, enemy.x, enemy.y, speed, passable);
         } else if (u.attackCooldown <= 0) {
           // Attack

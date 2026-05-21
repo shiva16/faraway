@@ -41,6 +41,7 @@ let onSave: (s: SaveState, sha: string | null) => Promise<string>;
 const keys: Record<string, boolean> = {};
 let eJustPressed  = false;
 let fJustPressed  = false;
+let uJustPressed  = false;
 let spellKeyPress: RuneKind | null = null;
 
 // Dialog
@@ -840,7 +841,10 @@ function drawBuildMode() {
   let ry = PY + 40;
   for (let idx = 0; idx < BUILDING_DEFS.length; idx++) {
     const def = BUILDING_DEFS[idx];
-    const affordable = canAfford(save.resources, def.cost);
+    const effCost = { ...def.cost };
+    if (save.researched.includes('masonry') && effCost.stone > 0)
+      effCost.stone = Math.ceil(effCost.stone * 0.75);
+    const affordable = canAfford(save.resources, effCost);
     const alreadyBuilt = def.unique && save.buildings.some(b => b.kind === def.kind);
     const active = selectedBuildKind === def.kind;
     const keyLabel = idx < 9 ? `[${idx + 1}]` : '[0]';
@@ -876,10 +880,10 @@ function drawBuildMode() {
       ctx.fillText('built', PX + PW - PAD - 2, ry + 16);
     } else {
       const cp: string[] = [];
-      if (def.cost.wood  > 0) cp.push(`${def.cost.wood}W`);
-      if (def.cost.stone > 0) cp.push(`${def.cost.stone}S`);
-      if (def.cost.food  > 0) cp.push(`${def.cost.food}F`);
-      if (def.cost.coin  > 0) cp.push(`${def.cost.coin}C`);
+      if (effCost.wood  > 0) cp.push(`${effCost.wood}W`);
+      if (effCost.stone > 0) cp.push(`${effCost.stone}S`);
+      if (effCost.food  > 0) cp.push(`${effCost.food}F`);
+      if (effCost.coin  > 0) cp.push(`${effCost.coin}C`);
       ctx.fillStyle = affordable ? '#a08030' : '#502818';
       ctx.font = '9px "Courier New", monospace';
       ctx.textAlign = 'right';
@@ -1389,6 +1393,7 @@ function drawSpellEffects() {
 
 function drawGhostShip() {
   if (atmosphere !== 'fog') return;
+  if (!save.buildings.some(b => b.kind === 'signal_fire')) return;
   const { sx, sy } = worldToScreen(ghostShipX, 6);
   if (sx > canvas.width + 200 || sx < -200) return;
   const s = SCALE;
@@ -2595,8 +2600,16 @@ function drawInventoryPanel(): void {
     ctx.fillText(def.label + (owned ? ` (×${owned.qty})` : ''), X + PAD + 10, ry + 16);
     ctx.fillStyle = '#607888'; ctx.font = '9px "Courier New", monospace'; ctx.fillText(def.desc, X + PAD + 10, ry + 29);
     const cs = [def.cost.wood > 0 ? `${def.cost.wood}W` : '', def.cost.stone > 0 ? `${def.cost.stone}S` : '', def.cost.food > 0 ? `${def.cost.food}F` : '', def.cost.coin > 0 ? `${def.cost.coin}C` : ''].filter(Boolean).join('·');
-    ctx.fillStyle = affordable ? '#a0c820' : '#603828'; ctx.textAlign = 'right';
-    ctx.fillText(affordable ? `[E] ${cs}` : cs, X + W - PAD - 8, ry + 22); ctx.textAlign = 'left';
+    let rightText: string; let rightColor: string;
+    if (owned && (def.kind === 'medicine' || def.kind === 'ration')) {
+      rightText = '[U] use'; rightColor = '#60c8a0';
+    } else if (owned && def.kind === 'sword') {
+      rightText = save.equippedItem === 'sword' ? 'equipped' : 'in bag'; rightColor = '#80a0d0';
+    } else {
+      rightText = affordable ? `[E] ${cs}` : cs; rightColor = affordable ? '#a0c820' : '#603828';
+    }
+    ctx.fillStyle = rightColor; ctx.textAlign = 'right';
+    ctx.fillText(rightText, X + W - PAD - 8, ry + 22); ctx.textAlign = 'left';
     ry += 54;
   }
   ctx.fillStyle = '#304050'; ctx.font = '10px "Courier New", monospace';
@@ -2924,6 +2937,14 @@ function plantSpecies(speciesId: string, tx: number, ty: number): boolean {
   save.carbonCredits = (save.carbonCredits ?? 0) + 2;
   eraBannerText = `✦  Planted ${def.commonName}  ✦`;
   eraBannerTimer = 100;
+  // First ever plant of this species — show ecological fact
+  const sameSpeciesCount = Object.values(save.plantedTiles ?? {}).filter(pt => pt.speciesId === speciesId).length;
+  if (sameSpeciesCount === 1 && def.ecologicalFact) {
+    educationPopup = {
+      lines: [`✦ ${def.commonName}`, `"FACT: ${def.ecologicalFact}"`],
+      timer: 400,
+    };
+  }
   return true;
 }
 
@@ -3142,13 +3163,17 @@ function nearbyResourceNode() {
 function gatherResource(nodeId: string) {
   const node = RESOURCE_NODES.find(n => n.id === nodeId);
   if (!node) return;
-  const forgeBonus = save.buildings.some(b => b.kind === 'forge') ? 1.5 : 1;
-  const catchmentBonus = node.kind === 'food' && save.buildings.some(b =>
+  const forgeBonus       = save.buildings.some(b => b.kind === 'forge') ? 1.5 : 1;
+  const catchmentBonus   = node.kind === 'food' && save.buildings.some(b =>
     b.kind === 'water_catchment' && Math.sqrt((node.tx - b.tx) ** 2 + (node.ty - b.ty) ** 2) < 8)
-    ? 1.3 : 1;
-  const zoneId = `${Math.floor(node.tx / ZONE_SIZE)},${Math.floor(node.ty / ZONE_SIZE)}`;
+    ? 1.5 : 1;
+  const betterToolsBonus = save.researched.includes('better_tools') ? 1.5 : 1;
+  const mayaBonus        = node.kind === 'food' && save.flags['maya_skill'] ? 1.5 : 1;
+  const axeBonus         = node.kind === 'wood'  && (save.inventory ?? []).some(i => i.kind === 'axe')     ? 2 : 1;
+  const pickaxeBonus     = (node.kind === 'stone' || node.kind === 'coin') && (save.inventory ?? []).some(i => i.kind === 'pickaxe') ? 2 : 1;
+  const zoneId  = `${Math.floor(node.tx / ZONE_SIZE)},${Math.floor(node.ty / ZONE_SIZE)}`;
   const zoneBonus = forestZones.get(zoneId)?.stability === 'thriving' ? 1.15 : 1;
-  const amount = Math.round(node.yield * forgeBonus * catchmentBonus * zoneBonus);
+  const amount = Math.round(node.yield * forgeBonus * catchmentBonus * betterToolsBonus * mayaBonus * axeBonus * pickaxeBonus * zoneBonus);
   save.resources[node.kind] += amount;
   save.flags[`dep_${node.id}`] = Date.now() + node.respawnSecs * 1000;
 
@@ -3162,14 +3187,17 @@ function gatherResource(nodeId: string) {
 function placeBuilding(kind: BuildingKind, tx: number, ty: number) {
   const def = BUILDING_DEFS.find(d => d.kind === kind);
   if (!def) return;
-  if (!canAfford(save.resources, def.cost)) return;
+  const effectiveCost = { ...def.cost };
+  if (save.researched.includes('masonry') && effectiveCost.stone > 0)
+    effectiveCost.stone = Math.ceil(effectiveCost.stone * 0.75);
+  if (!canAfford(save.resources, effectiveCost)) return;
   if (def.unique && save.buildings.some(b => b.kind === kind)) return;
   const tile = tileAt(tx, ty);
   const tileDef = TILE_DEFS[tile];
   if (!tileDef?.passable || tile === 0 || tile === 1 || tile === 2) return;
   if (save.buildings.some(b => b.tx === tx && b.ty === ty)) return;
 
-  deductCost(save.resources, def.cost);
+  deductCost(save.resources, effectiveCost);
   save.buildings.push({ id: `${kind}_${Date.now()}`, kind, tx, ty, hp: def.maxHp, maxHp: def.maxHp });
   checkEraAdvance();
 }
@@ -3451,8 +3479,8 @@ function collectNearbyRune() {
 function updateWeather(dt: number) {
   const spd = dt / 16.67;
 
-  // Ghost ship drifts slowly offshore (fog days)
-  if (atmosphere === 'fog') {
+  // Ghost ship drifts slowly offshore (fog days) — only after signal fire is built
+  if (atmosphere === 'fog' && save.buildings.some(b => b.kind === 'signal_fire')) {
     ghostShipX += 0.004 * spd;
     if (ghostShipX > WORLD_W + 10) ghostShipX = -12;
   }
@@ -3672,6 +3700,26 @@ function loop(now: number) {
     if (!dialogActive && !isDead) playerAttack();
   }
 
+  // U key — use consumable item (medicine → +50 HP, ration → +40 hunger)
+  if (uJustPressed) {
+    uJustPressed = false;
+    if (!dialogActive && !isDead) {
+      const medIdx = (save.inventory ?? []).findIndex(i => i.kind === 'medicine');
+      const ratIdx = (save.inventory ?? []).findIndex(i => i.kind === 'ration');
+      if (medIdx >= 0) {
+        save.hp = Math.min(PLAYER_MAX_HP, (save.hp ?? 100) + 50);
+        save.inventory[medIdx].qty--;
+        if (save.inventory[medIdx].qty <= 0) save.inventory.splice(medIdx, 1);
+        eraBannerText = '✦  Used Medicine  (+50 HP)  ✦'; eraBannerTimer = 120;
+      } else if (ratIdx >= 0) {
+        save.hunger = Math.min(PLAYER_MAX_HUNGER, (save.hunger ?? 100) + 40);
+        save.inventory[ratIdx].qty--;
+        if (save.inventory[ratIdx].qty <= 0) save.inventory.splice(ratIdx, 1);
+        eraBannerText = '✦  Used Ration  (+40 Hunger)  ✦'; eraBannerTimer = 120;
+      }
+    }
+  }
+
   // Death respawn
   if (isDead) {
     deathFade = Math.min(1, deathFade + 0.02);
@@ -3707,14 +3755,17 @@ function loop(now: number) {
         }
       }
     } else if (inventoryOpen && craftTarget) {
-      // Craft first affordable item at this building
-      const available = ITEM_DEFS.filter(i => i.craftAt === craftTarget);
+      // Craft first affordable item at this building; medicine requires lena_skill
+      const available = ITEM_DEFS.filter(i =>
+        i.craftAt === craftTarget &&
+        !(i.kind === 'medicine' && !save.flags['lena_skill']));
       const craftable = available.find(def => canAfford(save.resources, def.cost));
       if (craftable) {
         deductCost(save.resources, craftable.cost);
         const existing = save.inventory.find(i => i.kind === craftable.kind as any);
         if (existing) existing.qty++;
         else save.inventory.push({ kind: craftable.kind as any, qty: 1 });
+        if (craftable.kind === 'sword') save.equippedItem = 'sword';
         eraBannerText = `✦  Crafted ${craftable.label}  ✦`; eraBannerTimer = 120;
       }
     } else if (shipCraftMenuOpen) {
@@ -4066,6 +4117,7 @@ export function startGame(
     if (e.key === 't' || e.key === 'T') { tJustPressed = true; }
     if (e.key === 'i' || e.key === 'I') { iJustPressed = true; }
     if (e.key === 'p' || e.key === 'P') { pJustPressed = true; }
+    if (e.key === 'u' || e.key === 'U') { uJustPressed = true; }
     if (e.key === ' ') { e.preventDefault(); spaceJustPressed = true; }
     if (plantMode && e.key === 'ArrowRight') speciesPanelPage++;
     if (plantMode && e.key === 'ArrowLeft')  speciesPanelPage = Math.max(0, speciesPanelPage - 1);
