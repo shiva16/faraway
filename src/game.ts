@@ -16,7 +16,7 @@ import { queueTrain, tickTrainQueue, updateUnits, trainQueue } from './units';
 import { SPECIES, getSpecies } from './botany';
 import { THREATS, STARTING_THREAT } from './threats';
 import {
-  ForestZone, ZONE_SIZE,
+  ForestZone, ZoneStability, ZONE_SIZE,
   makeZone, tickZone,
 } from './ecology';
 
@@ -158,6 +158,7 @@ let plantMode           = false;
 let selectedSpeciesId: string | null = null;
 let pJustPressed        = false;
 let forestZones         = new Map<string, ForestZone>();
+let prevZoneStability   = new Map<string, ZoneStability>();
 let lastGlvDay          = -1;   // tracks which day GLV was last stepped
 let speciesPanelPage    = 0;       // pagination for species catalogue
 let biodiversityIndex   = 0;       // 0–100, recalculated each second
@@ -670,6 +671,119 @@ function drawBuildingSprite(kind: BuildingKind, cx: number, cy: number, s: numbe
         ctx.moveTo(cx - s, cy + 3 * s);
         ctx.lineTo(cx + 7 * s, cy + 7 * s);
         ctx.lineTo(cx - s, cy + 11 * s);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'tree_nursery': {
+      // Small greenhouse frame + seedling rows
+      ctx.fillStyle = '#3a5820';
+      ctx.fillRect(cx - 8 * s, cy - 2 * s, 16 * s, 10 * s);
+      ctx.fillStyle = '#a0c860';
+      ctx.fillRect(cx - 7 * s, cy - 1 * s, 14 * s, 8 * s);
+      // Roof arch
+      ctx.fillStyle = '#5a8030';
+      ctx.beginPath();
+      ctx.arc(cx, cy - 2 * s, 8 * s, Math.PI, 0);
+      ctx.fill();
+      // Seedlings
+      for (let i = -2; i <= 2; i++) {
+        ctx.fillStyle = '#28600a';
+        ctx.beginPath();
+        ctx.arc(cx + i * 2.5 * s, cy + 3 * s, 1.5 * s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#4a3818';
+        ctx.fillRect(cx + i * 2.5 * s - 0.5 * s, cy + 4.5 * s, s, 2 * s);
+      }
+      break;
+    }
+    case 'seed_bank': {
+      // Bunker-style vault
+      ctx.fillStyle = '#4a4838';
+      ctx.fillRect(cx - 9 * s, cy, 18 * s, 9 * s);
+      // Arched roof
+      ctx.fillStyle = '#3a3828';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 9 * s, Math.PI, 0);
+      ctx.fill();
+      // Door
+      ctx.fillStyle = '#6a5828';
+      ctx.fillRect(cx - 3 * s, cy + 2 * s, 6 * s, 7 * s);
+      // Vault wheel
+      ctx.strokeStyle = '#c8a840';
+      ctx.lineWidth = s * 0.8;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 5 * s, 2.5 * s, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      for (let a = 0; a < 4; a++) {
+        ctx.moveTo(cx, cy + 5 * s);
+        ctx.lineTo(cx + Math.cos(a * Math.PI / 2) * 2.5 * s, cy + 5 * s + Math.sin(a * Math.PI / 2) * 2.5 * s);
+      }
+      ctx.stroke();
+      break;
+    }
+    case 'ranger_station': {
+      // Watchtower on stilts
+      ctx.fillStyle = '#5a4020';
+      for (let i = -1; i <= 1; i += 2) {
+        ctx.fillRect(cx + i * 5 * s - s, cy + 2 * s, 2 * s, 10 * s);
+      }
+      // Platform
+      ctx.fillStyle = '#6b5028';
+      ctx.fillRect(cx - 7 * s, cy, 14 * s, 3 * s);
+      // Cabin
+      ctx.fillStyle = '#5a3a18';
+      ctx.fillRect(cx - 6 * s, cy - 8 * s, 12 * s, 9 * s);
+      // Roof
+      ctx.fillStyle = '#3a2810';
+      ctx.beginPath();
+      ctx.moveTo(cx - 8 * s, cy - 8 * s);
+      ctx.lineTo(cx, cy - 14 * s);
+      ctx.lineTo(cx + 8 * s, cy - 8 * s);
+      ctx.fill();
+      // Lookout window
+      ctx.fillStyle = '#c8e8a0';
+      ctx.fillRect(cx - 3 * s, cy - 7 * s, 6 * s, 4 * s);
+      break;
+    }
+    case 'water_catchment': {
+      // Raised cistern/tank
+      ctx.fillStyle = '#3a5868';
+      ctx.fillRect(cx - 8 * s, cy - 4 * s, 16 * s, 12 * s);
+      // Water shimmer inside
+      const wShimmer = Math.sin(wavePhase * 2) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(60,160,200,${0.5 + wShimmer * 0.3})`;
+      ctx.fillRect(cx - 7 * s, cy - 3 * s, 14 * s, 10 * s);
+      // Rim
+      ctx.strokeStyle = '#5a8890';
+      ctx.lineWidth = s;
+      ctx.strokeRect(cx - 8 * s, cy - 4 * s, 16 * s, 12 * s);
+      // Collection pipe
+      ctx.fillStyle = '#2a4858';
+      ctx.fillRect(cx - s, cy + 8 * s, 2 * s, 4 * s);
+      break;
+    }
+    case 'myco_lab': {
+      // Low round structure with mycelium glow
+      ctx.fillStyle = '#302818';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 2 * s, 9 * s, 6 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Dome
+      ctx.fillStyle = '#403828';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 8 * s, Math.PI, 0);
+      ctx.fill();
+      // Mycelium glow vents
+      const mycoGlow = Math.sin(wavePhase * 1.5) * 0.5 + 0.5;
+      for (let i = -1; i <= 1; i++) {
+        const grad = ctx.createRadialGradient(cx + i * 4 * s, cy + 2 * s, 0, cx + i * 4 * s, cy + 2 * s, 3 * s);
+        grad.addColorStop(0, `rgba(180,255,120,${0.6 + mycoGlow * 0.3})`);
+        grad.addColorStop(1, 'rgba(180,255,120,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx + i * 4 * s, cy + 2 * s, 3 * s, 0, Math.PI * 2);
         ctx.fill();
       }
       break;
@@ -2033,7 +2147,9 @@ function playerAttack(): void {
   if (attackCooldown > 0) return;
   const swordBonus = save.equippedItem === 'sword' ? 25 : 0;
   const smithBonus = (save.flags['ren_skill'] as boolean) ? 25 : 0;
-  const dmg = 25 + swordBonus + smithBonus;
+  const rangerBonus = save.buildings.some(b => b.kind === 'ranger_station' &&
+    Math.sqrt((player.x - b.tx) ** 2 + (player.y - b.ty) ** 2) < 6) ? 10 : 0;
+  const dmg = 25 + swordBonus + smithBonus + rangerBonus;
   attackCooldown = 30;
   attackFlash    = 10;
   attackDirX = player.dir === 'left' ? -1 : player.dir === 'right' ? 1 : 0;
@@ -2188,6 +2304,55 @@ function updateRaiders(dt: number): void {
   save.buildings = save.buildings.filter(b => b.hp > 0);
 }
 
+// ── Threat spawning ───────────────────────────────────────────────────────────
+
+const THREAT_SPAWN_POSITIONS: Partial<Record<string, { tx: number; ty: number }[]>> = {
+  industrial_logging:     [{ tx: 5,  ty: 8  }],
+  trophy_hunting:         [{ tx: 36, ty: 10 }, { tx: 40, ty: 14 }],
+  elephant_poaching:      [{ tx: 28, ty: 6  }, { tx: 32, ty: 8  }],
+  exotic_pet_trade:       [{ tx: 14, ty: 5  }, { tx: 20, ty: 4  }],
+  ocean_plastic:          [{ tx: 22, ty: 30 }, { tx: 30, ty: 31 }],
+  passenger_pigeon_moment:[{ tx: 10, ty: 14 }, { tx: 16, ty: 11 }],
+  palm_oil_clearing:      [{ tx: 38, ty: 20 }, { tx: 42, ty: 17 }],
+  whaling_operation:      [{ tx: 18, ty: 30 }, { tx: 26, ty: 32 }],
+  shark_finning:          [{ tx: 8,  ty: 31 }, { tx: 12, ty: 33 }],
+  rhino_poaching:         [{ tx: 34, ty: 26 }, { tx: 38, ty: 30 }],
+  pesticide_agriculture:  [{ tx: 28, ty: 22 }, { tx: 24, ty: 26 }],
+  deep_sea_trawling:      [{ tx: 6,  ty: 31 }, { tx: 10, ty: 34 }],
+  habitat_fragmentation:  [{ tx: 20, ty: 18 }, { tx: 24, ty: 22 }],
+};
+
+function maybeSpawnThreats(): void {
+  const day = save.dayCount ?? 0;
+  const era = save.era;
+  const existing = new Set((save.threatCamps ?? []).map(tc => tc.threatId));
+  for (const threat of THREATS) {
+    if (existing.has(threat.id)) continue;
+    if (threat.minEra > era) continue;
+    const minDay = threat.minEra === 1 ? 3 : 8;
+    if (day < minDay) continue;
+    const positions = THREAT_SPAWN_POSITIONS[threat.id];
+    if (!positions || positions.length === 0) continue;
+    const pos = positions[Math.floor(Math.random() * positions.length)];
+    if (!passable(pos.tx, pos.ty)) continue;
+    const occupied = (save.threatCamps ?? []).some(tc =>
+      Math.sqrt((tc.tx - pos.tx) ** 2 + (tc.ty - pos.ty) ** 2) < 3);
+    if (occupied) continue;
+    if (Math.random() > 0.2) continue;
+    if (!save.threatCamps) save.threatCamps = [];
+    save.threatCamps.push({
+      id: `camp_${threat.id}_${day}`,
+      threatId: threat.id,
+      tx: pos.tx, ty: pos.ty,
+      hp: threat.hp, maxHp: threat.hp,
+      educationShown: false,
+    });
+    eraBannerText  = `⚠  ${threat.name} spotted  ⚠`;
+    eraBannerTimer = 200;
+    return; // one spawn per day at most
+  }
+}
+
 // ── Survival (hunger + sanity + seasons) ─────────────────────────────────────
 
 function updateSurvival(dt: number): void {
@@ -2240,6 +2405,8 @@ function updateSurvival(dt: number): void {
     }
     // Spawn raid at first night of new day
     if ((save.enemyCampHp ?? 400) > 0) spawnRaid();
+    // Maybe spawn a new threat camp based on era + day progression
+    maybeSpawnThreats();
   }
 }
 
@@ -2664,6 +2831,38 @@ function updateForest(dt: number): void {
       if (!zoneSpecies.has(zid)) forestZones.delete(zid);
     }
 
+    // Trophic cascade: detect new thriving zones and notify with fauna arrivals
+    for (const [zid, zone] of forestZones) {
+      const prev = prevZoneStability.get(zid);
+      if (zone.stability === 'thriving' && prev !== 'thriving') {
+        const keystones = [...(zoneSpecies.get(zid) ?? [])].filter(sid =>
+          getSpecies(sid)?.ecologicalRoles.includes('keystone'));
+        const fauna = keystones.flatMap(sid => getSpecies(sid)?.supports.slice(0, 2) ?? []);
+        if (fauna.length > 0) {
+          educationPopup = {
+            lines: [
+              `✦ TROPHIC CASCADE — Zone restored to THRIVING`,
+              `Keystone species stabilised the ecosystem.`,
+              `Fauna returning to the area:`,
+              ...fauna.slice(0, 4).map(f => `  · ${f}`),
+            ],
+            timer: 500,
+          };
+        }
+      }
+      prevZoneStability.set(zid, zone.stability);
+    }
+
+    // Passive resource income: thriving zones provide food + wood per day
+    let thrivingCount = 0;
+    for (const z of forestZones.values()) {
+      if (z.stability === 'thriving') thrivingCount++;
+    }
+    if (thrivingCount > 0) {
+      save.resources.food = (save.resources.food ?? 0) + thrivingCount * 2;
+      save.resources.wood = (save.resources.wood ?? 0) + thrivingCount;
+    }
+
     // Feed zone health back to individual tile health
     for (const [key, pt] of Object.entries(save.plantedTiles ?? {})) {
       const [tx, ty] = key.split(',').map(Number);
@@ -2695,6 +2894,7 @@ function plantSpecies(speciesId: string, tx: number, ty: number): boolean {
   const def = getSpecies(speciesId);
   if (!def) return false;
   if (!canAfford(save.resources, def.cost)) return false;
+  if ((def.carbonCost ?? 0) > 0 && (save.carbonCredits ?? 0) < def.carbonCost!) return false;
   const key = tileKey(tx, ty);
   if ((save.plantedTiles ?? {})[key]) return false; // already planted
 
@@ -2703,7 +2903,9 @@ function plantSpecies(speciesId: string, tx: number, ty: number): boolean {
   const isAquatic = def.ecologicalRoles.includes('aquatic');
   const tile = tileAt(tx, ty);
   if (!TILE_DEFS[tile]?.passable) return false;
-  if (isAquatic && tile !== 1 && tile !== 2 && tile !== 13) return false; // must be water
+  const hasWaterCatchment = save.buildings.some(b =>
+    b.kind === 'water_catchment' && Math.sqrt((tx - b.tx) ** 2 + (ty - b.ty) ** 2) < 6);
+  if (isAquatic && tile !== 1 && tile !== 2 && tile !== 13 && !(hasWaterCatchment && tile === T.SAND)) return false;
   if (!isPioneer && !isAquatic) {
     const existingForest = Object.keys(save.plantedTiles ?? {}).some(k => {
       const [nx, ny] = k.split(',').map(Number);
@@ -2716,6 +2918,7 @@ function plantSpecies(speciesId: string, tx: number, ty: number): boolean {
   }
 
   deductCost(save.resources, def.cost);
+  if (def.carbonCost) save.carbonCredits = (save.carbonCredits ?? 0) - def.carbonCost;
   if (!save.plantedTiles) save.plantedTiles = {};
   save.plantedTiles[key] = { speciesId, plantedDay: save.dayCount ?? 0, maturity: 0.05, health: 1 };
   save.carbonCredits = (save.carbonCredits ?? 0) + 2;
@@ -2764,6 +2967,12 @@ function drawForestLayer(): void {
     if (!def) continue;
     const { sx, sy } = worldToScreen(tx, ty);
     const s = SCALE;
+    // Forest floor deepens with maturity — green tint on the tile beneath
+    if (pt.maturity > 0.2) {
+      ctx.fillStyle = 'rgba(20,70,10,1)';
+      ctx.globalAlpha = pt.maturity * 0.28;
+      ctx.fillRect(sx, sy, TILE_PX, TILE_PX);
+    }
     const alpha = 0.3 + pt.maturity * 0.7;
     const healthTint = pt.health < 0.4 ? 0.4 : 1;
     ctx.globalAlpha = alpha * healthTint;
@@ -2846,9 +3055,13 @@ function drawPlantPanel(): void {
     ctx.fillText(`${def.family} · ${def.ecologicalRoles[0].replace('_', ' ')}`, X + PAD + 22, ry + 36);
     // Cost
     const cs = Object.entries(def.cost).filter(([,v]) => v > 0).map(([k, v]) => `${v}${k[0].toUpperCase()}`).join('·');
-    ctx.fillStyle = affordable ? '#80c040' : '#602820';
+    const ccCost = def.carbonCost ?? 0;
+    const canAffordCC = ccCost === 0 || (save.carbonCredits ?? 0) >= ccCost;
+    const ccStr = ccCost > 0 ? ` +${ccCost}✦CC` : '';
+    const fullyAffordable = affordable && canAffordCC;
+    ctx.fillStyle = fullyAffordable ? '#80c040' : !canAffordCC ? '#a050c0' : '#602820';
     ctx.textAlign = 'right';
-    ctx.fillText(affordable ? `[click] ${cs}` : cs, X + W - PAD - 6, ry + 24);
+    ctx.fillText(fullyAffordable ? `[click] ${cs}${ccStr}` : `${cs}${ccStr}`, X + W - PAD - 6, ry + 24);
     ctx.textAlign = 'left';
     // Biodiversity score stars
     ctx.fillStyle = '#50a020';
@@ -2930,7 +3143,12 @@ function gatherResource(nodeId: string) {
   const node = RESOURCE_NODES.find(n => n.id === nodeId);
   if (!node) return;
   const forgeBonus = save.buildings.some(b => b.kind === 'forge') ? 1.5 : 1;
-  const amount = Math.round(node.yield * forgeBonus);
+  const catchmentBonus = node.kind === 'food' && save.buildings.some(b =>
+    b.kind === 'water_catchment' && Math.sqrt((node.tx - b.tx) ** 2 + (node.ty - b.ty) ** 2) < 8)
+    ? 1.3 : 1;
+  const zoneId = `${Math.floor(node.tx / ZONE_SIZE)},${Math.floor(node.ty / ZONE_SIZE)}`;
+  const zoneBonus = forestZones.get(zoneId)?.stability === 'thriving' ? 1.15 : 1;
+  const amount = Math.round(node.yield * forgeBonus * catchmentBonus * zoneBonus);
   save.resources[node.kind] += amount;
   save.flags[`dep_${node.id}`] = Date.now() + node.respawnSecs * 1000;
 

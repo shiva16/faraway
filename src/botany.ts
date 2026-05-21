@@ -48,6 +48,8 @@ export interface SpeciesDef {
   spreadRadius: number;         // tiles; mature plant can colonise nearby tiles
   cost: Resources;              // to plant (seeds counted as 'food')
   spriteTint: string;           // CSS colour for pixel sprite
+  // Carbon cost to plant (in addition to resource cost). Rare/flagship species only.
+  carbonCost?: number;
   // Pairwise ecological interactions (A-matrix row for this species).
   // Key = other speciesId. Value = effect of that species on THIS species' growth rate.
   // Positive = facilitation / mutualism. Negative = competition / suppression.
@@ -86,6 +88,7 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Least Concern — but habitat loss threatens pollinators',
     ecologicalFact: 'A single Banyan can support over 500 animal species. The largest known Banyan covers 3.5 acres — it is a forest in one tree.',
+    carbonCost: 6,
     interactions: {
       leucaena: 0.003,       // N-fixer enriches soil the banyan roots into
       vanilla_orchid: 0.001, // orchid bee network boosts fig pollination
@@ -114,6 +117,7 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Sacred to Maya peoples; threatened by palm oil conversion',
     ecologicalFact: 'Kapok is one of the few trees pollinated primarily by bats. Its seeds travel up to 30 km on silken fibres — earning it the name "the flying forest."',
+    carbonCost: 5,
     interactions: {
       leucaena: 0.002,  // N-fixer boosts kapok establishment
       banyan: -0.001,   // canopy competition for same emergent layer
@@ -142,6 +146,7 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Deeply threatened by fig wasp population collapse due to pesticides',
     ecologicalFact: 'The fig tree and its specific wasp have co-evolved for 80 million years. If either goes extinct, the other follows within a generation. Figs are the single most important food for tropical animals.',
+    carbonCost: 8,
     interactions: {
       leucaena: 0.003,   // N-fixer accelerates fig establishment
       wild_fig: 0.003,   // shared fig-wasp pollinators — mutualism
@@ -230,6 +235,7 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'EN',
     threatStatus: 'ENDANGERED — ancient baobabs dying en masse since 2005. Climate change suspected.',
     ecologicalFact: 'Nine of the world\'s 13 largest known baobabs — some over 2,000 years old — have collapsed and died since 2005. Scientists call it "a phenomenon without precedent." They store up to 100,000 litres of water in their trunks.',
+    carbonCost: 8,
     interactions: {
       acacia: 0.003,       // savanna guild: acacia fixes N, baobab benefits
       sycamore_fig: 0.001, // African savanna keystone synergy
@@ -289,6 +295,7 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Acute oak decline threatening UK forests; Processionary moth outbreak',
     ecologicalFact: 'A single mature English Oak supports more species of wildlife than any other native British tree — over 500 invertebrate species, 230 species of bird, mammal, and fungi. It can live 1,000 years. Britain has lost 50% of its ancient oaks since 1900.',
+    carbonCost: 6,
     interactions: {
       silver_birch: 0.004, // birch pioneer prepares soil and light for oak
       alder: 0.002,        // alder N-fixation enriches riparian oak habitat
@@ -376,6 +383,7 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Scotland\'s Caledonian Forest reduced to 1% of original extent',
     ecologicalFact: 'The Caledonian Forest once covered 1.5 million hectares of Scotland. Today, less than 1% survives — fragmented patches too small for wolves or lynx to live in. Each fragment is an island of isolation in an ocean of sheepwalk.',
+    carbonCost: 5,
     interactions: {
       silver_birch: 0.002,   // birch pioneer opens canopy for pine establishment
       siberian_larch: 0.003, // boreal conifer guild — larch and pine share mycorrhizae
@@ -701,6 +709,7 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'EN',
     threatStatus: 'ENDANGERED — 96% of old-growth coast redwood forest logged',
     ecologicalFact: 'Coast Redwoods are the tallest living organisms on Earth (116m). They can live 2,000 years. 96% of old-growth redwood forest was logged between 1850 and 1980. A logging operation can destroy in hours what took 2,000 years to build. The marbled murrelet, which nests only in old-growth, is now endangered — not because of ocean threats but because there are no trees left to nest in.',
+    carbonCost: 15,
     interactions: {
       scots_pine: 0.002,   // conifer guild — shared ectomycorrhizal architecture
       silver_birch: 0.001, // pioneer establishes forest floor conditions for redwood seedlings
@@ -730,6 +739,7 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'VU',
     threatStatus: 'VULNERABLE — cannot be cultivated in plantations; only survives in intact primary forest',
     ecologicalFact: 'Brazil nuts cannot be farmed. They will only fruit in intact primary Amazon rainforest because they need orchid bees for pollination (which need orchids) and agoutis for seed dispersal. Every Brazil nut you eat was harvested from a standing wild forest. The nut is proof the forest is alive.',
+    carbonCost: 10,
     interactions: {
       vanilla_orchid: 0.006, // orchid bee is the ONLY pollinator — vanilla hosts the bees
       wild_fig: 0.002,       // Amazon canopy guild
@@ -788,6 +798,7 @@ export const SPECIES: SpeciesDef[] = [
     iucnStatus: 'LC',
     threatStatus: 'Ancient groves (1,000–5,000 years old) threatened by land clearing and Xylella fastidiosa bacteria',
     ecologicalFact: 'The oldest olive tree in the world, in Crete, is estimated to be 4,000 years old and still produces olives. A 2,000-year-old olive tree in a Tunisian grove was bulldozed in 2019 to make way for a tourist road. Xylella fastidiosa bacteria, introduced from the Americas, is now killing ancient olive groves in Italy — 21 million trees dead.',
+    carbonCost: 5,
     interactions: {
       acacia: 0.002,   // Mediterranean-savanna boundary: both thrive in thin rocky soils
       moringa: 0.001,  // warm dryland medicinal guild
