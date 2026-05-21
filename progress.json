@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "px": 33.96254361127779,
-  "py": 17.215316736654213,
-  "dir": "right",
+  "px": 21.009944331133592,
+  "py": 16.165338572287034,
+  "dir": "down",
   "discoveries": [
     "old_fire",
     "hilltop_view",
@@ -30,10 +30,11 @@
     "dep_c1": 1779334611212,
     "dep_c3": 1779334602545,
     "dep_c0": 1779334616562,
-    "dep_w7": 1779334575078
+    "dep_w7": 1779334575078,
+    "evt_calm_seas": true
   },
-  "playTime": 2541.058900000195,
-  "lastSaved": "2026-05-21T03:52:17.290Z",
+  "playTime": 2661.075500000404,
+  "lastSaved": "2026-05-21T03:54:17.296Z",
   "collectedRunes": [],
   "essence": 100,
   "resources": {
@@ -45,18 +46,18 @@
   "buildings": [],
   "era": 1,
   "shipParts": [],
-  "hp": 100,
-  "hunger": 95.80623000006729,
+  "hp": 67.58489999999463,
+  "hunger": 0,
   "sanity": 100,
   "researched": [],
   "inventory": [],
   "equippedItem": null,
-  "season": "summer",
-  "seasonTimer": 114.00890000009564,
+  "season": "autumn",
+  "seasonTimer": 116.54999999999927,
   "explored": [],
   "respawnX": 33.96254361127779,
   "respawnY": 17.215316736654213,
   "enemyCampHp": 400,
   "raidLevel": 1,
-  "dayCount": 0
+  "dayCount": 1
 }
