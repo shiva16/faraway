@@ -1,5 +1,5 @@
 import { verifyToken, ensureRepo, loadSave, writeSave } from './github';
-import { startGame } from './game';
+import { startGame, triggerSaveAndExit, toggleMusicUI } from './game';
 import { defaultSave } from './types';
 import type { SaveState } from './types';
 
@@ -407,6 +407,25 @@ function initMobileControls(): void {
   tapKey('btn-plant',  'p');
   tapKey('btn-inv',    'i');
   tapKey('btn-esc',    'Escape');
+
+  // Utility buttons — HUD functions as DOM tappable buttons
+  tapKey('btn-util-help', 'h');
+  tapKey('btn-util-info', '?');
+
+  const btnMute = document.getElementById('btn-util-mute');
+  if (btnMute) {
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      toggleMusicUI();
+    });
+  }
+  const btnExit = document.getElementById('btn-util-exit');
+  if (btnExit) {
+    btnExit.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      triggerSaveAndExit();
+    });
+  }
 
   // Canvas swipe → arrow keys (info panel / plant catalogue page nav)
   const canvas = document.getElementById('game') as HTMLCanvasElement;

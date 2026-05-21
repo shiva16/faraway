@@ -306,6 +306,39 @@
     #btn-e      { color: #ffd870; border-color: rgba(255,210,80,0.4); }
     #btn-attack { color: #ff8060; border-color: rgba(255,100,60,0.35); }
     #btn-esc    { color: #8090b0; border-color: rgba(100,120,180,0.3); font-size: 9px; }
+
+    /* Utility buttons — centre strip between d-pad and action panel */
+    #util-btns {
+      position: absolute;
+      bottom: 10px;
+      left: 162px;
+      right: 132px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      pointer-events: all;
+    }
+    .util-btn {
+      background: rgba(18, 50, 14, 0.55);
+      border: 1px solid rgba(92, 216, 96, 0.22);
+      color: #7ab870;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      touch-action: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.07s;
+    }
+    .util-btn:active { background: rgba(40,110,30,0.78); color: #c8f080; }
+    #btn-util-mute { color: #70b860; }
+    #btn-util-exit { color: #c89040; }
   </style>
 </head>
 <body>
@@ -380,6 +413,13 @@
       <button class="act-btn" id="btn-plant"  aria-label="Plant">[ P ]<br>Plant</button>
       <button class="act-btn" id="btn-inv"    aria-label="Inventory">[ I ]<br>Inv</button>
       <button class="act-btn" id="btn-esc"    aria-label="Close">[ Esc ]<br>Close</button>
+    </div>
+
+    <div id="util-btns">
+      <button class="util-btn" id="btn-util-help" aria-label="Help">H</button>
+      <button class="util-btn" id="btn-util-info" aria-label="Guide">?</button>
+      <button class="util-btn" id="btn-util-mute" aria-label="Mute music">♪</button>
+      <button class="util-btn" id="btn-util-exit" aria-label="Save &amp; Exit">✦</button>
     </div>
   </div>
 

@@ -1137,8 +1137,9 @@ function drawResourceHUD() {
   const startX = 14;
   const startY = 46;
 
+  // 4 resource boxes + CC box
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(startX, startY, kinds.length * (W + PAD) - PAD, H);
+  ctx.fillRect(startX, startY, 5 * (W + PAD) - PAD, H);
 
   kinds.forEach((kind, i) => {
     const x = startX + i * (W + PAD);
@@ -1147,15 +1148,31 @@ function drawResourceHUD() {
     ctx.font = 'bold 10px "Space Mono", "Courier New", monospace';
     ctx.fillText(`${labels[i]}:${val}`, x + 4, startY + 15);
   });
+  // Carbon Credits
+  const ccX = startX + 4 * (W + PAD);
+  ctx.fillStyle = '#60c8c0';
+  ctx.font = 'bold 10px "Space Mono", "Courier New", monospace';
+  ctx.fillText(`CC:${save.carbonCredits ?? 0}`, ccX + 4, startY + 15);
 
   // Era indicator
   const eraLabels = ['', 'Stranded', 'Settled', 'Ready to Sail'];
   const eraColors = ['', '#608048', '#80a840', '#40a0c8'];
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(startX, startY + H + 4, 150, 18);
+  ctx.fillRect(startX, startY + H + 4, 180, 18);
   ctx.fillStyle = eraColors[save.era];
   ctx.font = '9px "Space Mono", "Courier New", monospace';
   ctx.fillText(`Era: ${eraLabels[save.era]}`, startX + 6, startY + H + 16);
+
+  // Training queue indicator
+  if (trainQueue.length > 0) {
+    const tq = trainQueue[0];
+    const qStr = `⚒ ${trainQueue.length} training (${Math.ceil(tq.timeLeft)}s)`;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(startX, startY + H + 26, 180, 14);
+    ctx.fillStyle = '#70a8c8';
+    ctx.font = '8px "Space Mono", "Courier New", monospace';
+    ctx.fillText(qStr, startX + 6, startY + H + 36);
+  }
 }
 
 // ── Spirit realm overlay ─────────────────────────────────────────────────────
@@ -1598,7 +1615,7 @@ function drawBuildingPrompts() {
     if (Math.sqrt(dx * dx + dy * dy) > range) continue;
 
     const { sx, sy } = worldToScreen(b.tx, b.ty);
-    const fw = hint.length * 6.5 + 18;
+    const fw = hint.length * 7 + 18;
     const fx = sx + TILE_PX / 2 - fw / 2;
     const fy = sy - 10;
     ctx.fillStyle   = 'rgba(0,0,0,0.72)';
@@ -1607,7 +1624,7 @@ function drawBuildingPrompts() {
     ctx.lineWidth   = 1;
     ctx.strokeRect(fx, fy - 18, fw, 20);
     ctx.fillStyle   = '#88d870';
-    ctx.font        = '9px "Space Mono","Courier New",monospace';
+    ctx.font        = '10px "Space Mono","Courier New",monospace';
     ctx.textAlign   = 'center';
     ctx.fillText(hint, sx + TILE_PX / 2, fy - 4);
     ctx.textAlign   = 'left';
@@ -1621,7 +1638,7 @@ function drawBuildingPrompts() {
       if (Math.sqrt(fdx * fdx + fdy * fdy) < 2.5) {
         const { sx, sy } = worldToScreen(fire.tx, fire.ty);
         const hint = '[ E ] Signal the ghost ship';
-        const fw   = hint.length * 6.5 + 18;
+        const fw   = hint.length * 7 + 18;
         const fx   = sx + TILE_PX / 2 - fw / 2;
         const fy   = sy - 32;
         ctx.fillStyle   = 'rgba(0,0,0,0.72)';
@@ -1630,7 +1647,7 @@ function drawBuildingPrompts() {
         ctx.lineWidth   = 1;
         ctx.strokeRect(fx, fy - 18, fw, 20);
         ctx.fillStyle   = '#ffd870';
-        ctx.font        = '9px "Space Mono","Courier New",monospace';
+        ctx.font        = '10px "Space Mono","Courier New",monospace';
         ctx.textAlign   = 'center';
         ctx.fillText(hint, sx + TILE_PX / 2, fy - 4);
         ctx.textAlign   = 'left';
@@ -1749,6 +1766,8 @@ function drawHelp() {
         ['R',        'Train ranger at Ranger Station (max 3)'],
         ['Tab',      'Open discoveries journal'],
         ['F',        'Toggle Spirit Realm'],
+        ['♪  icon / click', 'Mute or unmute background music'],
+        ['✦  icon / click', 'Save progress to cloud and exit'],
         ['Esc',      'Close any panel / cancel build'],
       ],
     },
@@ -1880,7 +1899,7 @@ function drawHelp() {
   ctx.fillStyle  = '#4a3d20';
   ctx.font       = '10px "Space Mono", "Courier New", monospace';
   ctx.textAlign  = 'center';
-  ctx.fillText('[ H ] or [ ? ] or [ Esc ] close', X + W / 2, Y + totalH - 10);
+  ctx.fillText('[ H ] [ ? ] Esc close  ·  ♪ mute  ·  ✦ save & exit', X + W / 2, Y + totalH - 10);
   ctx.textAlign  = 'left';
 }
 
@@ -2227,7 +2246,7 @@ function drawInfoPanel() {
   ctx.fillText(`◁  ${page.title}  ▷  (${infoPanelPage + 1}/${pageData.length})`, X + W / 2, Y + PAD + 12);
   ctx.fillStyle = '#406090';
   ctx.font = '8px "Space Mono", "Courier New", monospace';
-  ctx.fillText('Arrow keys to navigate  ·  Esc to close', X + W / 2, Y + PAD + 24);
+  ctx.fillText('Arrow keys / Swipe to navigate  ·  Esc to close', X + W / 2, Y + PAD + 24);
 
   ctx.textAlign = 'left';
   let sy = Y + PAD + 38;
@@ -2949,7 +2968,7 @@ function drawUnits(): void {
 // ── Survival HUD ──────────────────────────────────────────────────────────────
 
 function drawSurvivalHUD(): void {
-  const BAR_W = 80, BAR_H = 6, GAP = 4, bx = 14, by2 = canvas.height - 80;
+  const BAR_W = 80, BAR_H = 6, GAP = 4, bx = 14, by2 = 110;
   const hp = save.hp ?? PLAYER_MAX_HP;
   const hunger = save.hunger ?? PLAYER_MAX_HUNGER;
   const sanity = save.sanity ?? PLAYER_MAX_SANITY;
@@ -3012,7 +3031,7 @@ function drawSeasonTint(): void {
 function drawMinimap(): void {
   if (!world) return;
   const MW = 120, MH = 90;
-  const MX = canvas.width - MW - 14, MY = canvas.height - MH - 70;
+  const MX = canvas.width - MW - 14, MY = 40;
   ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(MX - 2, MY - 2, MW + 4, MH + 4);
   ctx.strokeStyle = '#4a3828'; ctx.lineWidth = 1; ctx.strokeRect(MX - 2, MY - 2, MW + 4, MH + 4);
   const sx2 = MW / WORLD_W, sy2 = MH / WORLD_H;
@@ -4111,7 +4130,15 @@ let lastTime = 0;
 let rafId    = 0;
 
 function loop(now: number) {
-  rafId      = requestAnimationFrame(loop);
+  rafId = requestAnimationFrame(loop);
+  if (saveExitPending) {
+    if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    drawSaveExitOverlay();
+    return;
+  }
   const dt   = Math.min(now - lastTime, 50);
   lastTime   = now;
 
@@ -4593,7 +4620,7 @@ function triggerSave() {
     });
 }
 
-function triggerSaveAndExit(): void {
+export function triggerSaveAndExit(): void {
   if (saveExitPending) return;
   saveExitPending = true;
   cancelAnimationFrame(rafId);
@@ -4620,6 +4647,11 @@ function triggerSaveAndExit(): void {
     rafId = requestAnimationFrame(loop);
     setTimeout(() => window.location.reload(), 4000);
   });
+}
+
+export function toggleMusicUI(): void {
+  initAudio();
+  toggleMuteMusic();
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
