@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "px": 24.37777954409073,
-  "py": 18.102852489502975,
-  "dir": "up",
+  "px": 26.617046790641297,
+  "py": 15.096666586684014,
+  "dir": "right",
   "discoveries": [
     "old_fire",
     "hilltop_view",
@@ -24,8 +24,8 @@
     "used_daily_2": true,
     "used_daily_1": true
   },
-  "playTime": 366.0280999999702,
-  "lastSaved": "2026-05-21T03:06:14.017Z",
+  "playTime": 486.04469999997775,
+  "lastSaved": "2026-05-21T03:08:14.029Z",
   "collectedRunes": [],
   "essence": 100
 }
