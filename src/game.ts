@@ -13,6 +13,8 @@ import {
   canAfford, deductCost, resourceColor, resourceIcon,
 } from './building';
 import { queueTrain, tickTrainQueue, updateUnits, trainQueue } from './units';
+import { SPECIES, getSpecies } from './botany';
+import { THREATS, STARTING_THREAT } from './threats';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -146,6 +148,15 @@ const SHADOWS = Array.from({ length: 6 }, (_, i) => ({
 
 // ── NPC state ─────────────────────────────────────────────────────────────────
 let npcsActive: string[] = [];
+
+// ── Forest restoration state ───────────────────────────────────────────────────
+let plantMode           = false;
+let selectedSpeciesId: string | null = null;
+let pJustPressed        = false;
+let speciesPanelPage    = 0;       // pagination for species catalogue
+let biodiversityIndex   = 0;       // 0–100, recalculated each second
+let educationPopup: { lines: string[]; timer: number } | null = null;
+let SPECIES_PER_PAGE    = 6;
 
 // ── Build mode ────────────────────────────────────────────────────────────────
 let buildMode           = false;
@@ -1976,6 +1987,26 @@ function playerAttack(): void {
       }
     }
   }
+  // Also damage nearby threat camps
+  for (const tc of (save.threatCamps ?? [])) {
+    const dx = tc.tx - player.x, dy = tc.ty - player.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 2.5) {
+      tc.hp = Math.max(0, tc.hp - dmg);
+      if (tc.hp <= 0) {
+        const def = THREATS.find(t => t.id === tc.threatId);
+        if (def) {
+          educationPopup = { lines: def.defeatText, timer: 500 };
+          // Drop loot
+          save.resources.wood  += 30; save.resources.stone += 15; save.resources.coin += 10;
+          save.carbonCredits = (save.carbonCredits ?? 0) + 20;
+          eraBannerText  = `✦  ${def.name} DEFEATED  ✦`; eraBannerTimer = 240;
+        }
+        // Also clear old enemyCampHp
+        save.enemyCampHp = 0;
+      }
+    }
+  }
   if (audioCtx) {
     const osc = audioCtx.createOscillator(); const g = audioCtx.createGain();
     osc.type = 'sawtooth'; osc.frequency.value = 200;
@@ -1996,33 +2027,46 @@ function drawAttackArc(): void {
   ctx.globalAlpha = 1;
 }
 
-// ── Enemy camp ────────────────────────────────────────────────────────────────
+// ── Threat camps ─────────────────────────────────────────────────────────────
 
 function drawEnemyCamp(): void {
-  if (save.enemyCampHp <= 0) return;
-  const { sx, sy } = worldToScreen(CAMP_X, CAMP_Y);
-  const cx = sx + TILE_PX / 2, cy = sy + TILE_PX / 2, s = SCALE;
+  for (const tc of (save.threatCamps ?? [])) {
+    if (tc.hp <= 0) continue;
+    const def = THREATS.find(t => t.id === tc.threatId);
+    const { sx, sy } = worldToScreen(tc.tx, tc.ty);
+    const cx = sx + TILE_PX / 2, cy = sy + TILE_PX / 2, s = SCALE;
 
-  ctx.fillStyle = '#1e1418';
-  ctx.beginPath(); ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#4a2828'; ctx.lineWidth = s;
-  ctx.beginPath(); ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#1e1418';
+    ctx.beginPath(); ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = def?.campTint ?? '#4a2828'; ctx.lineWidth = s;
+    ctx.beginPath(); ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2); ctx.stroke();
 
-  for (let i = 0; i < 4; i++) {
-    const angle = i * Math.PI / 2;
-    ctx.fillStyle = '#d8c8a8';
-    ctx.fillRect(cx + Math.cos(angle) * 8 * s - s, cy + Math.sin(angle) * 8 * s - 5 * s, 2 * s, 10 * s);
+    for (let i = 0; i < 4; i++) {
+      const angle = i * Math.PI / 2;
+      ctx.fillStyle = def?.campTint ?? '#d8c8a8';
+      ctx.fillRect(cx + Math.cos(angle) * 8 * s - s, cy + Math.sin(angle) * 8 * s - 5 * s, 2 * s, 10 * s);
+    }
+    const flicker = Math.sin(wavePhase * 6) * 0.5 + 0.5;
+    ctx.fillStyle = `rgb(${160 + Math.floor(flicker * 40)},${40 + Math.floor(flicker * 20)},10)`;
+    ctx.beginPath(); ctx.ellipse(cx, cy, 2 * s, 3 * s + flicker * s, 0, 0, Math.PI * 2); ctx.fill();
+
+    if (fogGrid[tc.ty]?.[tc.tx]) {
+      const barW = 30 * s;
+      ctx.fillStyle = '#400'; ctx.fillRect(cx - barW / 2, cy - 14 * s, barW, 3 * s);
+      ctx.fillStyle = '#c83030'; ctx.fillRect(cx - barW / 2, cy - 14 * s, barW * (tc.hp / tc.maxHp), 3 * s);
+      ctx.fillStyle = '#d8c8a8'; ctx.font = '8px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${def?.icon ?? '⚠'} ${def?.name ?? 'Enemy Camp'}`, cx, cy - 16 * s);
+      ctx.textAlign = 'left';
+    }
   }
-  const flicker = Math.sin(wavePhase * 6) * 0.5 + 0.5;
-  ctx.fillStyle = `rgb(${160 + Math.floor(flicker * 40)},${40 + Math.floor(flicker * 20)},10)`;
-  ctx.beginPath(); ctx.ellipse(cx, cy, 2 * s, 3 * s + flicker * s, 0, 0, Math.PI * 2); ctx.fill();
-
-  if (fogGrid[CAMP_Y]?.[CAMP_X]) {
-    const barW = 30 * s;
-    ctx.fillStyle = '#400'; ctx.fillRect(cx - barW / 2, cy - 14 * s, barW, 3 * s);
-    ctx.fillStyle = '#c83030'; ctx.fillRect(cx - barW / 2, cy - 14 * s, barW * (save.enemyCampHp / 400), 3 * s);
-    ctx.fillStyle = '#d8c8a8'; ctx.font = '8px "Courier New", monospace';
-    ctx.textAlign = 'center'; ctx.fillText('Enemy Camp', cx, cy - 16 * s); ctx.textAlign = 'left';
+  // Backward compat: also draw old camp if no threat camps list (migrated away)
+  if (!(save.threatCamps?.length) && (save.enemyCampHp ?? 0) > 0) {
+    const { sx, sy } = worldToScreen(CAMP_X, CAMP_Y);
+    const cx = sx + TILE_PX / 2, cy = sy + TILE_PX / 2, s = SCALE;
+    ctx.fillStyle = '#1e1418'; ctx.beginPath(); ctx.arc(cx, cy, 10 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c8c8a0'; ctx.font = '8px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('Enemy Camp', cx, cy); ctx.textAlign = 'left';
   }
 }
 
@@ -2426,6 +2470,291 @@ function handleNpcInteract(npcId: string): void {
     openDialog({ id: `npc_c_${npcId}`, tx: def.tx, ty: def.ty, range: 999, prompt: '',
       lines: [`${def.name} — skill: ${def.rewardLabel}`] });
   }
+}
+
+// ── Forest restoration system ────────────────────────────────────────────────
+
+function tileKey(tx: number, ty: number): string { return `${tx},${ty}`; }
+
+function calcBiodiversityIndex(): number {
+  const tiles = save.plantedTiles ?? {};
+  if (Object.keys(tiles).length === 0) return 0;
+  const speciesPresent = new Set<string>();
+  let total = 0, keystoneBonus = 1;
+  for (const pt of Object.values(tiles)) {
+    if (pt.maturity < 0.5) continue;
+    const def = getSpecies(pt.speciesId);
+    if (!def) continue;
+    speciesPresent.add(pt.speciesId);
+    total += def.biodiversityScore * pt.maturity * pt.health;
+    if (def.keystoneMultiplier > 1) keystoneBonus = Math.max(keystoneBonus, def.keystoneMultiplier);
+  }
+  const mycoLab = save.buildings.some(b => b.kind === 'myco_lab');
+  const connectivity = mycoLab ? 1.5 : 1.0;
+  const raw = (speciesPresent.size * 5 + total) * keystoneBonus * connectivity;
+  return Math.min(100, Math.round(raw));
+}
+
+function updateForest(dt: number): void {
+  const secs = dt / 1000;
+  const tiles = save.plantedTiles ?? {};
+  const season = (save.season ?? 'summer') as string;
+  const seedBank = save.buildings.some(b => b.kind === 'seed_bank');
+  const nursery  = save.buildings.some(b => b.kind === 'tree_nursery');
+  const mycoLab  = save.buildings.some(b => b.kind === 'myco_lab');
+
+  for (const [key, pt] of Object.entries(tiles)) {
+    const def = getSpecies(pt.speciesId);
+    if (!def) { delete tiles[key]; continue; }
+
+    // Growth speed modifiers
+    let growthMult = 1;
+    if (season === 'spring') growthMult = 2;
+    if (season === 'winter' && def.biomes.some(b => b === 'tropical')) {
+      growthMult = seedBank ? 0.1 : 0;  // tropical species die in winter unless seed bank
+    }
+    if (nursery) growthMult *= 1.5;
+    // Nitrogen-fixer adjacency bonus
+    const [stx, sty] = key.split(',').map(Number);
+    let nitroBonus = 1;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
+        const nb = tiles[tileKey(stx + dx, sty + dy)];
+        if (!nb) continue;
+        const nbDef = getSpecies(nb.speciesId);
+        if (nbDef?.ecologicalRoles.includes('nitrogen_fixer')) { nitroBonus = 1.5; break; }
+      }
+    }
+
+    const seasonsPassed = (save.dayCount ?? 0) / 4; // 4 days per season approx
+    const targetMaturity = Math.min(1, seasonsPassed / (def.growthSeasons * 4));
+    const growRate = (targetMaturity - pt.maturity) * growthMult * nitroBonus * secs * 0.05;
+    pt.maturity = Math.min(1, pt.maturity + Math.max(0, growRate));
+
+    // Health
+    let health = pt.health;
+    const anyThreat = (save.threatCamps ?? []).some(tc => {
+      const d = Math.sqrt((tc.tx - stx) ** 2 + (tc.ty - sty) ** 2);
+      return d < 5 && tc.hp > 0;
+    });
+    if (anyThreat) health = Math.max(0.2, health - 0.01 * secs);
+    else health = Math.min(1, health + 0.005 * secs);
+    if (mycoLab) health = Math.min(1, health + 0.003 * secs); // network healing
+    pt.health = health;
+
+    // Spread: mature species spread to adjacent empty tiles occasionally
+    if (pt.maturity >= 1 && Math.random() < 0.0001 * secs * def.spreadRadius) {
+      const spreadMult = mycoLab ? 2 : 1;
+      for (let attempt = 0; attempt < spreadMult; attempt++) {
+        const sx2 = stx + Math.round((Math.random() - 0.5) * def.spreadRadius * 2);
+        const sy2 = sty + Math.round((Math.random() - 0.5) * def.spreadRadius * 2);
+        const nk = tileKey(sx2, sy2);
+        if (!tiles[nk] && passable(sx2, sy2)) {
+          // Only pioneers can spread to bare tiles; others need existing forest
+          const hasForesNeighbour = Object.keys(tiles).some(k => {
+            const [nx, ny] = k.split(',').map(Number);
+            return Math.sqrt((nx - sx2) ** 2 + (ny - sy2) ** 2) < 2;
+          });
+          if (def.ecologicalRoles.includes('pioneer') || hasForesNeighbour) {
+            tiles[nk] = { speciesId: def.id, plantedDay: save.dayCount ?? 0, maturity: 0.05, health: 0.8 };
+            save.carbonCredits = (save.carbonCredits ?? 0) + 1;
+          }
+        }
+      }
+    }
+  }
+
+  // Update biodiversity index
+  biodiversityIndex = calcBiodiversityIndex();
+
+  // Update threat camps
+  for (const tc of (save.threatCamps ?? [])) {
+    // Show educational text when player approaches
+    const d = Math.sqrt((player.x - tc.tx) ** 2 + (player.y - tc.ty) ** 2);
+    if (d < 4 && !tc.educationShown) {
+      tc.educationShown = true;
+      const def = THREATS.find(t => t.id === tc.threatId);
+      if (def) {
+        educationPopup = { lines: def.encounterText, timer: 400 };
+      }
+    }
+  }
+}
+
+function plantSpecies(speciesId: string, tx: number, ty: number): boolean {
+  const def = getSpecies(speciesId);
+  if (!def) return false;
+  if (!canAfford(save.resources, def.cost)) return false;
+  const key = tileKey(tx, ty);
+  if ((save.plantedTiles ?? {})[key]) return false; // already planted
+
+  // Pioneers can go on any passable tile; others need adjacent forest
+  const isPioneer = def.ecologicalRoles.includes('pioneer');
+  const isAquatic = def.ecologicalRoles.includes('aquatic');
+  const tile = tileAt(tx, ty);
+  if (!TILE_DEFS[tile]?.passable) return false;
+  if (isAquatic && tile !== 1 && tile !== 2 && tile !== 13) return false; // must be water
+  if (!isPioneer && !isAquatic) {
+    const existingForest = Object.keys(save.plantedTiles ?? {}).some(k => {
+      const [nx, ny] = k.split(',').map(Number);
+      return Math.sqrt((nx - tx) ** 2 + (ny - ty) ** 2) < 3;
+    });
+    // Also OK to plant near existing trees (forest edge tiles)
+    const nearForestTile = tileAt(tx - 1, ty) === T.FOREST || tileAt(tx + 1, ty) === T.FOREST ||
+      tileAt(tx, ty - 1) === T.FOREST || tileAt(tx, ty + 1) === T.FOREST;
+    if (!existingForest && !nearForestTile) return false;
+  }
+
+  deductCost(save.resources, def.cost);
+  if (!save.plantedTiles) save.plantedTiles = {};
+  save.plantedTiles[key] = { speciesId, plantedDay: save.dayCount ?? 0, maturity: 0.05, health: 1 };
+  save.carbonCredits = (save.carbonCredits ?? 0) + 2;
+  eraBannerText = `✦  Planted ${def.commonName}  ✦`;
+  eraBannerTimer = 100;
+  return true;
+}
+
+function drawForestLayer(): void {
+  const tiles = save.plantedTiles ?? {};
+  for (const [key, pt] of Object.entries(tiles)) {
+    const [tx, ty] = key.split(',').map(Number);
+    const def = getSpecies(pt.speciesId);
+    if (!def) continue;
+    const { sx, sy } = worldToScreen(tx, ty);
+    const s = SCALE;
+    const alpha = 0.3 + pt.maturity * 0.7;
+    const healthTint = pt.health < 0.4 ? 0.4 : 1;
+    ctx.globalAlpha = alpha * healthTint;
+    // Draw plant sprite based on canopy layer
+    const cx = sx + TILE_PX / 2, cy = sy + TILE_PX * 0.7;
+    const size = (pt.maturity * 0.6 + 0.4) * s;
+    if (def.canopyLayer === 'ground' || def.canopyLayer === 'shrub') {
+      // Low plant: small cluster of circles
+      ctx.fillStyle = def.spriteTint;
+      ctx.beginPath(); ctx.arc(cx, cy, 4 * size, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = def.spriteTint + 'aa';
+      ctx.beginPath(); ctx.arc(cx - 3 * size, cy - 2 * size, 2.5 * size, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 3 * size, cy - 2 * size, 2.5 * size, 0, Math.PI * 2); ctx.fill();
+    } else if (def.canopyLayer === 'understory') {
+      // Small tree shape
+      ctx.fillStyle = '#4a3020';
+      ctx.fillRect(cx - s, cy, 2 * s, 5 * size);
+      ctx.fillStyle = def.spriteTint;
+      ctx.beginPath(); ctx.arc(cx, cy, 5 * size, 0, Math.PI * 2); ctx.fill();
+    } else {
+      // Full tree (canopy / emergent)
+      const h = (def.canopyLayer === 'emergent' ? 12 : 8) * size;
+      ctx.fillStyle = '#4a3020';
+      ctx.fillRect(cx - 1.5 * s, cy - h * 0.3, 3 * s, h * 0.7);
+      ctx.fillStyle = def.spriteTint;
+      ctx.beginPath(); ctx.arc(cx, cy - h * 0.4, 6 * size, 0, Math.PI * 2); ctx.fill();
+      if (def.canopyLayer === 'emergent') {
+        ctx.fillStyle = def.spriteTint + '88';
+        ctx.beginPath(); ctx.arc(cx, cy - h * 0.7, 3 * size, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // Maturity sparkle: tiny white dots when fully grown
+    if (pt.maturity >= 1 && Math.random() < 0.02) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.beginPath(); ctx.arc(cx + (Math.random() - 0.5) * 8 * s, cy - (Math.random() * 6 * s), s * 0.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawPlantPanel(): void {
+  if (!plantMode) return;
+  const allSpecies = SPECIES;
+  const PAGE = SPECIES_PER_PAGE;
+  const pageCount = Math.ceil(allSpecies.length / PAGE);
+  speciesPanelPage = Math.max(0, Math.min(pageCount - 1, speciesPanelPage));
+  const visible = allSpecies.slice(speciesPanelPage * PAGE, (speciesPanelPage + 1) * PAGE);
+  const W = 380, ROW = 52, PAD = 12;
+  const H = visible.length * ROW + 88;
+  const X = (canvas.width - W) / 2, Y = (canvas.height - H) / 2;
+
+  ctx.fillStyle = 'rgba(2,10,2,0.97)'; ctx.fillRect(X, Y, W, H);
+  ctx.strokeStyle = '#204810'; ctx.lineWidth = 2; ctx.strokeRect(X, Y, W, H);
+
+  ctx.fillStyle = '#50c050'; ctx.font = 'bold 12px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('✦  PLANT SPECIES CATALOGUE  ✦', X + W / 2, Y + PAD + 12);
+  ctx.fillStyle = '#304820'; ctx.font = '9px "Courier New", monospace';
+  ctx.fillText(`Biodiversity Index: ${biodiversityIndex}%  ·  Carbon Credits: ${save.carbonCredits ?? 0}  ·  Page ${speciesPanelPage + 1}/${pageCount}`, X + W / 2, Y + PAD + 27);
+
+  ctx.textAlign = 'left';
+  let ry = Y + PAD + 38;
+  for (const def of visible) {
+    const affordable = canAfford(save.resources, def.cost);
+    const selected = selectedSpeciesId === def.id;
+    ctx.fillStyle = selected ? 'rgba(20,50,20,0.9)' : 'rgba(8,16,8,0.8)';
+    ctx.fillRect(X + PAD, ry, W - PAD * 2, ROW - 4);
+    ctx.strokeStyle = selected ? '#40a840' : '#1a3010'; ctx.lineWidth = selected ? 2 : 1;
+    ctx.strokeRect(X + PAD, ry, W - PAD * 2, ROW - 4);
+    // Tint swatch
+    ctx.fillStyle = def.spriteTint;
+    ctx.fillRect(X + PAD + 6, ry + 6, 8, ROW - 16);
+    // Name + scientific
+    ctx.fillStyle = '#b0e890'; ctx.font = 'bold 10px "Courier New", monospace';
+    ctx.fillText(def.commonName, X + PAD + 22, ry + 14);
+    ctx.fillStyle = '#507840'; ctx.font = 'italic 8px "Courier New", monospace';
+    ctx.fillText(def.scientificName, X + PAD + 22, ry + 25);
+    // Family
+    ctx.fillStyle = '#406030'; ctx.font = '8px "Courier New", monospace';
+    ctx.fillText(`${def.family} · ${def.ecologicalRoles[0].replace('_', ' ')}`, X + PAD + 22, ry + 36);
+    // Cost
+    const cs = Object.entries(def.cost).filter(([,v]) => v > 0).map(([k, v]) => `${v}${k[0].toUpperCase()}`).join('·');
+    ctx.fillStyle = affordable ? '#80c040' : '#602820';
+    ctx.textAlign = 'right';
+    ctx.fillText(affordable ? `[click] ${cs}` : cs, X + W - PAD - 6, ry + 24);
+    ctx.textAlign = 'left';
+    // Biodiversity score stars
+    ctx.fillStyle = '#50a020';
+    ctx.fillText('★'.repeat(Math.round(def.biodiversityScore / 2)), X + PAD + 22, ry + 47);
+    ry += ROW;
+  }
+  ctx.fillStyle = '#1a3010'; ctx.textAlign = 'center'; ctx.font = '9px "Courier New", monospace';
+  ctx.fillText('[←][→] page  ·  [click species] select  ·  [click world] plant  ·  [P] close', X + W / 2, Y + H - 10);
+  ctx.textAlign = 'left';
+}
+
+function drawBiodiversityHUD(): void {
+  const W = 160, H = 14, x = (canvas.width - W) / 2, y = 8;
+  ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(x - 2, y - 2, W + 4, H + 4);
+  ctx.fillStyle = '#0a1a0a'; ctx.fillRect(x, y, W, H);
+  const pct = biodiversityIndex / 100;
+  const col = pct < 0.25 ? '#803010' : pct < 0.5 ? '#a07010' : pct < 0.75 ? '#60a030' : '#20e040';
+  ctx.fillStyle = col; ctx.fillRect(x, y, Math.round(W * pct), H);
+  ctx.strokeStyle = '#204810'; ctx.lineWidth = 1; ctx.strokeRect(x, y, W, H);
+  ctx.fillStyle = '#90d060'; ctx.font = '8px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`🌿 Biodiversity ${biodiversityIndex}%`, x + W / 2, y + 10);
+  ctx.textAlign = 'left';
+}
+
+function drawEducationPopup(): void {
+  if (!educationPopup) return;
+  educationPopup.timer--;
+  if (educationPopup.timer <= 0) { educationPopup = null; return; }
+  const alpha = Math.min(1, educationPopup.timer / 40) * Math.min(1, (400 - educationPopup.timer) / 20);
+  const lines = educationPopup.lines;
+  const W = 440, PAD = 18;
+  const H = lines.length * 22 + PAD * 2;
+  const X = (canvas.width - W) / 2, Y = canvas.height / 2 - H / 2 - 40;
+  ctx.globalAlpha = Math.max(0, alpha);
+  ctx.fillStyle = 'rgba(2,6,2,0.97)'; ctx.fillRect(X, Y, W, H);
+  ctx.strokeStyle = '#308030'; ctx.lineWidth = 2; ctx.strokeRect(X, Y, W, H);
+  ctx.textAlign = 'center';
+  for (let i = 0; i < lines.length; i++) {
+    const isFact = lines[i].startsWith('"FACT:');
+    ctx.fillStyle = isFact ? '#a0e070' : '#d0eca0';
+    ctx.font = isFact ? 'bold 9px "Courier New", monospace' : 'italic 10px "Courier New", monospace';
+    // Word wrap
+    let line = lines[i];
+    if (line.length > 62) line = line.slice(0, 60) + '…';
+    ctx.fillText(line, X + W / 2, Y + PAD + 15 + i * 22);
+  }
+  ctx.globalAlpha = 1; ctx.textAlign = 'left';
 }
 
 // ── Resource gathering ────────────────────────────────────────────────────────
@@ -3099,16 +3428,27 @@ function loop(now: number) {
     if (keys['n'] || keys['N']) { save = { ...save, buildings: [], resources: { wood: 0, stone: 0, food: 0, coin: 0 }, era: 1, shipParts: [] }; escapePhase = 0; escapeFade = 0; }
   }
 
-  // Entity + spell + weather + survival updates
+  // Entity + spell + weather + survival + forest updates
   updateEntities(dt);
   updateSpells(dt);
   updateWeather(dt);
   updateSurvival(dt);
   updateRaiders(dt);
+  updateForest(dt);
   tickTrainQueue(dt, units, save);
   updateUnits(units, save, dt, [...entities, ...raiders], passable);
   if (attackFlash > 0) attackFlash--;
   if (attackCooldown > 0) attackCooldown--;
+
+  // P key — plant mode
+  if (pJustPressed) {
+    pJustPressed = false;
+    if (!dialogActive) {
+      plantMode = !plantMode;
+      if (!plantMode) { selectedSpeciesId = null; buildMode = false; }
+      else { buildMode = false; selectedBuildKind = null; }
+    }
+  }
 
   // Save timer
   if (saveStatusTimer > 0) saveStatusTimer--;
@@ -3175,6 +3515,7 @@ function loop(now: number) {
     }
   }
 
+  drawForestLayer();
   drawResourceNodes();
   drawBuildings();
   drawEnemyCamp();
@@ -3194,6 +3535,9 @@ function loop(now: number) {
   drawBuildMode();
   drawTechPanel();
   drawInventoryPanel();
+  drawPlantPanel();
+  drawBiodiversityHUD();
+  drawEducationPopup();
   drawGatherFlash();
   drawSurvivalHUD();
   drawSanityEffects();
@@ -3254,6 +3598,20 @@ export function startGame(
   if (save.enemyCampHp    === undefined) save.enemyCampHp    = 400;
   if (save.raidLevel      === undefined) save.raidLevel      = 1;
   if (save.dayCount       === undefined) save.dayCount       = 0;
+  if (save.plantedTiles   === undefined) save.plantedTiles   = {};
+  if (save.threatCamps    === undefined) save.threatCamps    = [];
+  if (save.biodiversityLog=== undefined) save.biodiversityLog= [];
+  if (save.carbonCredits  === undefined) save.carbonCredits  = 0;
+  // Ensure starting threat camp exists
+  if (save.threatCamps.length === 0) {
+    save.threatCamps.push({
+      id: 'camp_logging_start',
+      threatId: 'industrial_logging',
+      tx: CAMP_X, ty: CAMP_Y,
+      hp: STARTING_THREAT.hp, maxHp: STARTING_THREAT.maxHp,
+      educationShown: false,
+    });
+  }
   // Init runtime state
   fogGrid = initFog();
   units = [];
@@ -3261,6 +3619,7 @@ export function startGame(
   selectedUnits = [];
   npcsActive = NPC_DEFS.filter(n => n.spawnEra <= save.era).map(n => n.id);
   lastDayCount = Math.floor((save.playTime ?? 0) / 120);
+  biodiversityIndex = calcBiodiversityIndex();
   saveSha    = sha;
   onSave     = saveCallback;
   world      = buildWorld();
@@ -3314,7 +3673,10 @@ export function startGame(
     if (e.key === 'b' || e.key === 'B') { bJustPressed = true; }
     if (e.key === 't' || e.key === 'T') { tJustPressed = true; }
     if (e.key === 'i' || e.key === 'I') { iJustPressed = true; }
+    if (e.key === 'p' || e.key === 'P') { pJustPressed = true; }
     if (e.key === ' ') { e.preventDefault(); spaceJustPressed = true; }
+    if (plantMode && e.key === 'ArrowRight') speciesPanelPage++;
+    if (plantMode && e.key === 'ArrowLeft')  speciesPanelPage = Math.max(0, speciesPanelPage - 1);
     if (e.key === 'v' || e.key === 'V') {
       // Train villager at nearest shelter
       const sh = save.buildings.find(b => b.kind === 'shelter' &&
@@ -3331,6 +3693,7 @@ export function startGame(
       dialogActive = false; discPanelOpen = false; helpPanelOpen = false;
       buildMode = false; selectedBuildKind = null; shipCraftMenuOpen = false;
       techPanelOpen = false; inventoryOpen = false;
+      plantMode = false; selectedSpeciesId = null;
     }
   });
   window.addEventListener('keyup', e => { keys[e.key] = false; });
@@ -3386,8 +3749,35 @@ export function startGame(
       return;
     }
 
+    // Plant mode: select species from panel or plant on world
+    if (plantMode) {
+      const PAGE = SPECIES_PER_PAGE;
+      const allSpecies = SPECIES;
+      const visible = allSpecies.slice(speciesPanelPage * PAGE, (speciesPanelPage + 1) * PAGE);
+      const W = 380, ROW = 52, PAD = 12;
+      const H = visible.length * ROW + 88;
+      const panX = (canvas.width - W) / 2, panY = (canvas.height - H) / 2;
+      if (e.clientX >= panX && e.clientX <= panX + W && e.clientY >= panY && e.clientY <= panY + H) {
+        // Clicked inside panel — select species
+        const relY = e.clientY - (panY + PAD + 38);
+        const idx = Math.floor(relY / ROW);
+        if (idx >= 0 && idx < visible.length) {
+          selectedSpeciesId = visible[idx].id === selectedSpeciesId ? null : visible[idx].id;
+        }
+        return;
+      } else if (selectedSpeciesId) {
+        // Clicked world — plant selected species
+        const camX = player.x * TILE_PX - canvas.width  / 2;
+        const camY = player.y * TILE_PX - canvas.height / 2;
+        const tx = Math.floor((e.clientX + camX) / TILE_PX);
+        const ty = Math.floor((e.clientY + camY) / TILE_PX);
+        plantSpecies(selectedSpeciesId, tx, ty);
+        return;
+      }
+    }
+
     // Unit selection
-    if (!buildMode) {
+    if (!buildMode && !plantMode) {
       const camX = player.x * TILE_PX - canvas.width  / 2;
       const camY = player.y * TILE_PX - canvas.height / 2;
       const wx = (e.clientX + camX) / TILE_PX;

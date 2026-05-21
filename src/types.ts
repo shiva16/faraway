@@ -154,7 +154,17 @@ export interface ResourceNode {
 
 // ── Buildings ─────────────────────────────────────────────────────────────────
 
-export type BuildingKind = 'shelter' | 'workshop' | 'forge' | 'signal_fire' | 'dock';
+export type BuildingKind =
+  | 'shelter'
+  | 'workshop'
+  | 'forge'
+  | 'signal_fire'
+  | 'dock'
+  | 'tree_nursery'      // grows seedlings; unlocks rare planting
+  | 'seed_bank'         // protects species from extinction events
+  | 'ranger_station'    // trains forest rangers; threat combat bonus
+  | 'water_catchment'   // unlocks wetland/aquatic species; food bonus
+  | 'myco_lab';         // extends mycorrhizal network; forest spread ×2
 
 export interface PlacedBuilding {
   id: string;
@@ -194,6 +204,27 @@ export interface TechDef {
   requires: TechId | null;
 }
 
+// ── Forest / Botany ───────────────────────────────────────────────────────────
+
+/** A tile that has been planted with a species */
+export interface PlantedTile {
+  speciesId: string;
+  plantedDay: number;   // in-game day when planted
+  maturity: number;     // 0–1; reaches 1 after growthSeasons complete
+  health: number;       // 0–1; affected by neighbours, season, threats
+}
+
+/** An active threat camp on the map */
+export interface ThreatCamp {
+  id: string;            // unique instance id
+  threatId: string;      // references ThreatDef.id
+  tx: number;
+  ty: number;
+  hp: number;
+  maxHp: number;
+  educationShown: boolean;
+}
+
 // ── Save state ────────────────────────────────────────────────────────────────
 
 export interface SaveState {
@@ -227,6 +258,11 @@ export interface SaveState {
   enemyCampHp: number;
   raidLevel: number;     // current raiders-per-night count
   dayCount: number;      // in-game days elapsed
+  // v5 — Forest Restoration
+  plantedTiles: Record<string, PlantedTile>;  // key = `${tx},${ty}`
+  threatCamps: ThreatCamp[];
+  biodiversityLog: number[];   // index reading per in-game day (for chart)
+  carbonCredits: number;       // earned by restoring ecosystems
 }
 
 export function defaultSave(): SaveState {
@@ -259,5 +295,9 @@ export function defaultSave(): SaveState {
     enemyCampHp: 400,
     raidLevel: 1,
     dayCount: 0,
+    plantedTiles: {},
+    threatCamps: [],
+    biodiversityLog: [],
+    carbonCredits: 0,
   };
 }

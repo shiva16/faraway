@@ -44,9 +44,44 @@ export const BUILDING_DEFS: BuildingDef[] = [
   {
     kind: 'dock',
     label: 'Dock',
-    desc: 'Build and launch your ship. The way off the island.',
+    desc: 'Build and launch your ship. Sail to restore the next island.',
     cost: { wood: 40, stone: 20, food: 0, coin: 0 },
     unique: true, size: 2, maxHp: 250,
+  },
+  {
+    kind: 'tree_nursery',
+    label: 'Tree Nursery',
+    desc: 'Grow seedlings from collected seeds. Unlocks rare species planting. Forest restoration +50%.',
+    cost: { wood: 25, stone: 8, food: 10, coin: 0 },
+    unique: false, size: 1, maxHp: 200,
+  },
+  {
+    kind: 'seed_bank',
+    label: 'Seed Bank',
+    desc: 'Stores genetic diversity. Protects planted species from winter die-off and threat events. A covenant with the future.',
+    cost: { wood: 15, stone: 20, food: 0, coin: 10 },
+    unique: true, size: 1, maxHp: 300,
+  },
+  {
+    kind: 'ranger_station',
+    label: 'Ranger Station',
+    desc: 'Train Forest Rangers (max 3). Rangers patrol and intercept threats. Combat damage ×2 vs. threat camps.',
+    cost: { wood: 30, stone: 15, food: 0, coin: 5 },
+    unique: false, size: 1, maxHp: 250,
+  },
+  {
+    kind: 'water_catchment',
+    label: 'Water Catchment',
+    desc: 'Harvests rainwater. Unlocks aquatic and wetland species. Food nodes near water yield +50%.',
+    cost: { wood: 20, stone: 10, food: 0, coin: 0 },
+    unique: false, size: 1, maxHp: 150,
+  },
+  {
+    kind: 'myco_lab',
+    label: 'Mycorrhizal Lab',
+    desc: 'Studies the wood wide web. Planted trees within 6 tiles share nutrients. Forest spread radius ×2. The network beneath everything.',
+    cost: { wood: 10, stone: 10, food: 0, coin: 20 },
+    unique: true, size: 1, maxHp: 200,
   },
 ];
 

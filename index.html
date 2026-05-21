@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Faraway</title>
+  <title>Faraway — Forest Restoration</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      background: #0a0d14;
+      background: #060d06;
       overflow: hidden;
       font-family: 'Courier New', Courier, monospace;
     }
@@ -28,59 +28,96 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #0a0d14;
-      transition: opacity 0.8s ease;
+      background: #060d06;
+      transition: opacity 0.9s ease;
     }
     #login-overlay.fade-out {
       opacity: 0;
       pointer-events: none;
     }
 
-    /* Pixel-star canvas behind card */
-    #stars { position: absolute; inset: 0; pointer-events: none; }
+    /* Forest scene canvas — fills background */
+    #forest-bg { position: absolute; inset: 0; pointer-events: none; }
+
+    /* Firefly layer */
+    #fireflies { position: absolute; inset: 0; pointer-events: none; }
 
     .login-card {
       position: relative;
       z-index: 1;
-      width: 360px;
-      padding: 36px 32px 28px;
-      background: #11100a;
-      border: 2px solid #3d2f1a;
-      box-shadow: 0 0 60px rgba(180, 120, 40, 0.12), 0 0 0 1px #1e1a10;
+      width: 380px;
+      padding: 34px 30px 26px;
+      background: rgba(4, 10, 4, 0.93);
+      border: 2px solid #1e4018;
+      box-shadow:
+        0 0 80px rgba(30, 120, 30, 0.10),
+        0 0 0 1px #0a1a0a,
+        inset 0 0 40px rgba(0, 20, 0, 0.4);
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 18px;
     }
 
     .login-title {
       text-align: center;
     }
     .login-title h1 {
-      font-size: 2.2rem;
-      letter-spacing: 0.22em;
-      color: #d4a853;
+      font-size: 2.4rem;
+      letter-spacing: 0.26em;
+      color: #5cd860;
       text-transform: uppercase;
       line-height: 1;
+      text-shadow: 0 0 20px rgba(60,180,60,0.4), 0 0 40px rgba(40,120,40,0.2);
     }
-    .login-title p {
-      font-size: 0.72rem;
-      color: #7a6a4a;
-      margin-top: 6px;
-      letter-spacing: 0.1em;
+    .login-title .tagline {
+      font-size: 0.68rem;
+      color: #3a6830;
+      margin-top: 8px;
+      letter-spacing: 0.12em;
+      line-height: 1.6;
+    }
+    .login-title .tagline em {
+      color: #6aaa50;
+      font-style: italic;
     }
 
     .pixel-divider {
       height: 2px;
       background: repeating-linear-gradient(
         to right,
-        #3d2f1a 0px, #3d2f1a 4px,
+        #1e4018 0px, #1e4018 4px,
         transparent 4px, transparent 8px
       );
     }
 
+    /* Guardian figure canvas */
+    .guardian-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: -6px;
+    }
+    #guardian-canvas {
+      image-rendering: pixelated;
+    }
+
+    .fact-strip {
+      font-size: 0.62rem;
+      color: #3a6030;
+      text-align: center;
+      padding: 8px 10px;
+      background: rgba(0,8,0,0.6);
+      border: 1px solid #162a10;
+      border-radius: 1px;
+      line-height: 1.6;
+      letter-spacing: 0.04em;
+    }
+    .fact-strip strong {
+      color: #80c850;
+    }
+
     label {
-      font-size: 0.7rem;
-      color: #7a6a4a;
+      font-size: 0.68rem;
+      color: #3a6030;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       display: block;
@@ -89,61 +126,58 @@
 
     input[type="password"], input[type="text"] {
       width: 100%;
-      background: #0a0905;
-      border: 1px solid #3d2f1a;
-      color: #d4a853;
+      background: #030803;
+      border: 1px solid #1e4018;
+      color: #7ad860;
       font-family: inherit;
       font-size: 0.82rem;
       padding: 9px 12px;
       outline: none;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    input:focus { border-color: #8b6830; }
-    input::placeholder { color: #3d2f1a; }
+    input:focus {
+      border-color: #3a8830;
+      box-shadow: 0 0 8px rgba(50,140,40,0.25);
+    }
+    input::placeholder { color: #1e4018; }
 
     .login-btn {
       width: 100%;
-      background: #2a1e0a;
-      border: 2px solid #6b4e20;
-      color: #d4a853;
+      background: #081a08;
+      border: 2px solid #2a6820;
+      color: #7ad860;
       font-family: inherit;
       font-size: 0.8rem;
-      letter-spacing: 0.15em;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
-      padding: 11px;
+      padding: 12px;
       cursor: pointer;
-      transition: background 0.2s, border-color 0.2s;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
     }
     .login-btn:hover:not(:disabled) {
-      background: #3a2a0e;
-      border-color: #c8843a;
+      background: #102810;
+      border-color: #5cd860;
+      box-shadow: 0 0 16px rgba(80,200,60,0.2);
     }
-    .login-btn:disabled { opacity: 0.4; cursor: default; }
+    .login-btn:disabled { opacity: 0.35; cursor: default; }
 
     .login-error {
-      font-size: 0.72rem;
-      color: #c8503a;
+      font-size: 0.7rem;
+      color: #c85040;
       text-align: center;
       min-height: 1rem;
       letter-spacing: 0.05em;
     }
 
     .login-hint {
-      font-size: 0.65rem;
-      color: #4a3d28;
+      font-size: 0.62rem;
+      color: #284820;
       text-align: center;
       line-height: 1.6;
     }
-    .login-hint a { color: #6b5030; }
-
-    /* ── Pixel art wanderer on login ── */
-    .wanderer-wrap {
-      display: flex;
-      justify-content: center;
-      margin-bottom: -8px;
-    }
-    #wanderer-canvas {
-      image-rendering: pixelated;
+    .login-hint code {
+      color: #3a6830;
+      letter-spacing: 0.05em;
     }
   </style>
 </head>
@@ -151,22 +185,28 @@
   <canvas id="game"></canvas>
 
   <div id="login-overlay">
-    <canvas id="stars"></canvas>
+    <canvas id="forest-bg"></canvas>
+    <canvas id="fireflies"></canvas>
 
     <div class="login-card">
       <div class="login-title">
         <h1>Faraway</h1>
-        <p>a tiny island, waiting</p>
+        <p class="tagline">
+          Every creature has found its place.<br>
+          <em>Every seed is a choice. Every forest, a victory.</em>
+        </p>
       </div>
 
-      <div class="wanderer-wrap">
-        <canvas id="wanderer-canvas" width="48" height="64"></canvas>
+      <div class="guardian-wrap">
+        <canvas id="guardian-canvas" width="64" height="80"></canvas>
       </div>
 
       <div class="pixel-divider"></div>
 
+      <div id="eco-fact" class="fact-strip">Loading ecological data…</div>
+
       <div>
-        <label for="pat-input">GitHub token</label>
+        <label for="pat-input">GitHub token (saves your forest)</label>
         <input
           id="pat-input"
           type="password"
@@ -178,13 +218,14 @@
 
       <div>
         <button id="login-btn" class="login-btn" disabled>
-          Set Sail
+          Begin Restoration
         </button>
         <div class="login-error" id="login-error"></div>
       </div>
 
       <p class="login-hint">
-        Your token is used only to save progress<br>to your <code>shiva16/faraway</code> repository.
+        Token saves your progress to <code>shiva16/faraway</code>.<br>
+        Only the forest remembers what you plant here.
       </p>
     </div>
   </div>
